@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { frameHeight } from '@/data/config'
 import longVideo from '@/assets/long.mp4'
+import { debounce } from 'lodash-es'
 import { getVideoFrames, createSpriteImage, calculateFramePosition } from '@/utils/index'
 
 // const videoUrl = 'https://oss.laf.run/ukw0y1-site/beautiful-girl-with-audio.mp4'
@@ -188,26 +189,6 @@ async function initFrameContainer(videoUrl: string) {
   container.style.width = '100%'
   container.style.height = `${containerHeight}px` // 使用固定高度
   container.style.cursor = 'pointer'
-}
-
-/**
- * 防抖函数，限制函数频繁调用
- * @param func 需要执行的函数
- * @param delay 延迟时间(ms)
- * @returns 防抖处理后的函数
- */
-/**
- * 防抖函数，限制函数频繁调用
- * @param func 需要执行的函数
- * @param delay 延迟时间(ms)
- * @returns 防抖处理后的函数
- */
-function debounce<T extends (...args: unknown[]) => unknown>(func: T, delay: number) {
-  let timeoutId: ReturnType<typeof setTimeout>
-  return (...args: Parameters<T>) => {
-    clearTimeout(timeoutId)
-    timeoutId = setTimeout(() => func(...args), delay)
-  }
 }
 
 // 创建防抖版本的初始化函数

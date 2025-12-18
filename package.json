@@ -18,6 +18,7 @@
     "format": "prettier --write --experimental-cli src/"
   },
   "dependencies": {
+    "lodash-es": "^4.17.22",
     "pinia": "^3.0.4",
     "vue": "^3.5.25",
     "vue-router": "^4.6.3"
@@ -26,6 +27,7 @@
     "@iconify/json": "^2.2.419",
     "@prettier/plugin-oxc": "^0.0.5",
     "@tsconfig/node24": "^24.0.3",
+    "@types/lodash-es": "^4.17.12",
     "@types/node": "^24.10.1",
     "@unocss/preset-icons": "^66.5.10",
     "@vitejs/plugin-vue": "^6.0.2",
