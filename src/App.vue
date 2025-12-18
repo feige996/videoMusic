@@ -157,16 +157,9 @@ onMounted(async () => {
 
 <template>
   <div class="min-h-screen bg-gray-50 p-4">
+    {{ frameData.length }}
     <!-- 视频帧容器 -->
-    <div
-      ref="frameContainer"
-      class="w-full overflow-x-auto flex"
-      style="
-        --filmstrip-thumb-width: v-bind('spriteData?.frameWidth || 0');
-        --filmstrip-thumb-height: v-bind('spriteData?.frameHeight || 0');
-        --filmstrip-rows: v-bind('spriteData?.rows || 1');
-      "
-    >
+    <div ref="frameContainer" class="w-full overflow-x-auto flex">
       <div
         v-for="frame in frameData"
         :key="frame.index"
@@ -174,11 +167,9 @@ onMounted(async () => {
         :data-thumb="frame.dataThumb"
         class="relative flex-1 bg-no-repeat"
         :style="{
-          '--filmstrip-sprite-x': frame.col,
-          '--filmstrip-sprite-y': frame.row,
           'background-image': `url(${spriteData?.url})`,
-          'background-position': `calc(-1 * var(--filmstrip-sprite-x) * var(--filmstrip-thumb-width)) calc(-1 * var(--filmstrip-sprite-y) * var(--filmstrip-thumb-height))`,
-          'background-size': `auto calc(var(--filmstrip-rows) * 100%)`,
+          'background-position': `calc(-1 * ${frame.col} * ${spriteData?.frameWidth || 0}px) calc(-1 * ${frame.row} * ${spriteData?.frameHeight || 0}px)`,
+          'background-size': `auto calc(${spriteData?.rows || 1} * 100%)`,
           width: `${spriteData?.frameWidth}px`,
           height: `${spriteData?.frameHeight}px`,
         }"
