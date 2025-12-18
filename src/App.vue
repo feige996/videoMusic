@@ -1,9 +1,11 @@
 <script lang="ts" setup>
 import { ref, onMounted, nextTick } from 'vue'
 import { frameHeight } from '@/data/config'
+import longVideo from '@/assets/long.mp4'
 import { getVideoFrames, createSpriteImage, calculateFramePosition } from '@/utils/index'
 
-const videoUrl = 'https://oss.laf.run/ukw0y1-site/beautiful-girl-with-audio.mp4'
+// const videoUrl = 'https://oss.laf.run/ukw0y1-site/beautiful-girl-with-audio.mp4'
+const videoUrl = longVideo
 const frameContainer = ref<HTMLElement | null>(null)
 const frameData = ref<Array<{ index: number; row: number; col: number; dataThumb: string }>>([])
 const spriteData = ref<{
@@ -28,13 +30,24 @@ async function initFrameContainer(videoUrl: string) {
   const cacheKey = `video_sprite_${videoUrl}_${containerWidth}`
   let cachedData = sessionStorage.getItem(cacheKey)
 
+  // 初始化videoInfo变量，提供默认值以避免在赋值前使用的错误
   let videoInfo: {
     frames: HTMLCanvasElement[]
     videoAspectRatio: number
     frameWidth: number
     frameHeight: number
+  } = {
+    frames: [],
+    videoAspectRatio: 16 / 9, // 默认16:9宽高比
+    frameWidth: 0,
+    frameHeight: 0,
   }
-  let spriteInfo: { spriteUrl: string; rows: number; cols: number }
+  // 初始化spriteInfo变量，提供默认值以避免在赋值前使用的错误
+  let spriteInfo: { spriteUrl: string; rows: number; cols: number } = {
+    spriteUrl: '',
+    rows: 0,
+    cols: 0,
+  }
 
   if (cachedData) {
     try {
@@ -66,11 +79,12 @@ async function initFrameContainer(videoUrl: string) {
 
     // 从原始50帧中均匀采样实际需要显示的帧数
     // 目的是确保在时间轴上均匀分布帧，而非仅显示视频开头部分
-    const selectedFrames = []
+    const selectedFrames: HTMLCanvasElement[] = []
     for (let i = 0; i < frameCount; i++) {
       // 计算采样索引，确保在整个50帧范围内均匀分布
       const index = Math.floor(i * (50 / frameCount))
-      selectedFrames.push(videoInfo.frames[index] || videoInfo.frames[0])
+      const frame = videoInfo.frames[index] || videoInfo.frames[0]!
+      selectedFrames.push(frame)
     }
 
     // 设置精灵图列数，根据帧数量调整

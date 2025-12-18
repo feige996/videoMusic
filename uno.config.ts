@@ -4,13 +4,15 @@ import {
   presetAttributify,
   presetIcons,
   presetTypography,
+  presetUno,
   transformerDirectives,
   transformerVariantGroup,
 } from 'unocss'
 
 export default defineConfig({
-  // 配置预设使用顺序
   presets: [
+    // 基础预设，提供核心工具类（必须放在第一位）
+    presetUno(),
     // 属性化模式预设，启用属性风格的类名
     presetAttributify({
       // 启用前缀模式，避免与原生属性冲突
