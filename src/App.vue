@@ -54,20 +54,23 @@ async function initFrameContainer(videoUrl: string) {
 
   if (!cachedData) {
     // 获取视频帧和视频信息
-    videoInfo = await getVideoFrames(videoUrl, 50) // 获取50帧，足够显示在时间轴上
+    // 先获取50个原始帧，作为均匀分布的视频帧源
+    videoInfo = await getVideoFrames(videoUrl, 50)
 
     // 根据容器高度和视频宽高比计算帧宽度
     const containerHeight = frameHeight
     const calculatedFrameWidth = containerHeight * videoInfo.videoAspectRatio
 
-    // 计算实际需要的帧数，基于容器宽度和计算出的帧宽度
-    const frameCount = Math.min(50, Math.floor(containerWidth / calculatedFrameWidth))
+    // 计算实际需要显示的帧数，基于容器宽度和计算出的帧宽度
+    const frameCount = Math.ceil(containerWidth / calculatedFrameWidth)
 
-    // 从50帧中均匀采样实际需要的帧数
-    const step = 50 / frameCount
+    // 从原始50帧中均匀采样实际需要显示的帧数
+    // 目的是确保在时间轴上均匀分布帧，而非仅显示视频开头部分
     const selectedFrames = []
     for (let i = 0; i < frameCount; i++) {
-      selectedFrames.push(videoInfo.frames[Math.floor(i * step)] || videoInfo.frames[0])
+      // 计算采样索引，确保在整个50帧范围内均匀分布
+      const index = Math.floor(i * (50 / frameCount))
+      selectedFrames.push(videoInfo.frames[index] || videoInfo.frames[0])
     }
 
     // 设置精灵图列数，根据帧数量调整
@@ -128,7 +131,7 @@ async function initFrameContainer(videoUrl: string) {
 
   // 设置容器样式
   container.style.width = '100%'
-  container.style.height = '60px' // 使用固定高度
+  container.style.height = `${containerHeight}px` // 使用固定高度
   container.style.cursor = 'pointer'
 }
 
