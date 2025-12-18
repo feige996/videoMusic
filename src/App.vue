@@ -1,32 +1,54 @@
-<script setup lang="ts">
-// 测试Vue API自动导入
-// 注意：这里不需要显式导入ref，因为unplugin-auto-import会自动导入Vue的API
-const message = ref('Vue API 自动导入测试')
-const count = ref(0)
+<script lang="ts" setup>
+import { getVideoFrames, createSpriteImage } from '@/utils/index'
+import { frameHeight } from '@/data/config'
 
-// 增加计数函数
-const incrementCount = () => {
-  count.value++
+const videoUrl = 'https://oss.laf.run/ukw0y1-site/beautiful-girl-with-audio.mp4'
+const frameContainer = ref(null)
+async function initFrameContainer(videoUrl) {
+  const container = frameContainer.value
+  const containerWidth = container.clientWidth
+  const frameCount = Math.floor(containerWidth / frameHeight) // 动态计算需要的帧数
+
+  // 优先从本地缓存取精灵图（避免重复取帧）
+  const cacheKey = `video_sprite_${videoUrl}_${frameCount}`
+  const cachedSpriteUrl = sessionStorage.getItem(cacheKey)
+
+  let spriteUrl
+  if (cachedSpriteUrl) {
+    spriteUrl = cachedSpriteUrl
+  } else {
+    // 取帧+生成精灵图
+    const frames = await getVideoFrames(videoUrl, frameCount)
+    spriteUrl = await createSpriteImage(frames, frameHeight, frameHeight)
+    // 缓存精灵图（有效期1小时，避免缓存过大）
+    sessionStorage.setItem(cacheKey, spriteUrl)
+    setTimeout(() => sessionStorage.removeItem(cacheKey), 3600 * 1000)
+  }
+
+  // 渲染精灵图容器
+  container.style.width = `${frameCount * frameHeight}px`
+  container.style.height = `${frameHeight}px`
+  container.style.backgroundImage = `url(${spriteUrl})`
+  container.style.backgroundRepeat = 'no-repeat'
+
+  // 示例：用户 hover 到某位置时，显示对应帧（也可直接平铺）
+  container.addEventListener('mousemove', (e) => {
+    const x = e.offsetX
+    const frameIndex = Math.floor(x / frameHeight)
+    // 计算背景偏移（竖排精灵图，仅偏移y轴）
+    container.style.backgroundPosition = `0 ${-frameIndex * frameHeight}px`
+  })
 }
+
+onMounted(async () => {
+  await nextTick()
+  await initFrameContainer(videoUrl)
+})
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-    <!-- 标题部分，使用UnoCSS样式 -->
-    <h1 class="text-4xl font-bold text-center mb-8 text-blue-600">
-      {{ message }}
-    </h1>
-
-    <!-- 测试自动导入的ref和方法 -->
-    <div class="space-y-6 w-full max-w-md">
-      <el-button type="primary" class="w-full" @click="incrementCount">
-        点击计数: {{ count }}
-      </el-button>
-
-      <!-- 测试响应式数据 -->
-      <div class="text-center p-4 bg-white rounded-lg shadow">
-        <p class="text-gray-700">当前计数: {{ count }}</p>
-      </div>
-    </div>
+  <div class="min-h-screen bg-gray-50 p-4">
+    <!-- 视频帧容器 -->
+    <div ref="frameContainer" class="w-full"></div>
   </div>
 </template>
