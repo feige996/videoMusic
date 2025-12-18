@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { frameHeight } from '@/data/config'
 import longVideo from '@/assets/long.mp4'
 import { getVideoFrames, createSpriteImage, calculateFramePosition } from '@/utils/index'
@@ -26,9 +26,13 @@ async function initFrameContainer(videoUrl: string) {
 
   const containerWidth = container.clientWidth
 
-  // 优先从本地缓存取精灵图（避免重复取帧）
-  const cacheKey = `video_sprite_${videoUrl}_${containerWidth}`
-  let cachedData = sessionStorage.getItem(cacheKey)
+  // 定义视频原始帧数据的缓存键，用于存储视频本身的帧数据
+  const videoFramesCacheKey = `video_frames_${videoUrl}`
+  // 定义精灵图缓存键，包含视频URL和容器宽度
+  const spriteCacheKey = `video_sprite_${videoUrl}_${containerWidth}`
+
+  let cachedSpriteData = sessionStorage.getItem(spriteCacheKey)
+  let cachedVideoFramesData = sessionStorage.getItem(videoFramesCacheKey)
 
   // 初始化videoInfo变量，提供默认值以避免在赋值前使用的错误
   let videoInfo: {
@@ -49,26 +53,59 @@ async function initFrameContainer(videoUrl: string) {
     cols: 0,
   }
 
-  if (cachedData) {
+  // 优先使用精灵图缓存
+  if (cachedSpriteData) {
     try {
-      const parsed = JSON.parse(cachedData)
+      const parsed = JSON.parse(cachedSpriteData)
       spriteInfo = parsed.spriteInfo
       videoInfo = {
-        frames: [], // 缓存中不需要保存帧数据
+        frames: [], // 精灵图缓存中不需要保存帧数据
         videoAspectRatio: parsed.videoAspectRatio,
         frameWidth: parsed.frameWidth,
         frameHeight: parsed.frameHeight,
       }
     } catch {
       // 缓存格式错误，重新生成
-      cachedData = null
+      cachedSpriteData = null
     }
   }
 
-  if (!cachedData) {
-    // 获取视频帧和视频信息
-    // 先获取50个原始帧，作为均匀分布的视频帧源
-    videoInfo = await getVideoFrames(videoUrl, 50)
+  // 如果没有精灵图缓存或需要重新生成
+  if (!cachedSpriteData) {
+    // 检查是否有视频帧缓存
+    if (cachedVideoFramesData) {
+      try {
+        const parsed = JSON.parse(cachedVideoFramesData)
+        // 恢复视频信息，但frames数组需要重新创建canvas元素
+        // 这里简化处理，实际项目中可能需要更复杂的canvas重建逻辑
+        videoInfo = {
+          frames: [], // 从缓存中恢复frames比较复杂，这里仍从视频重新获取
+          videoAspectRatio: parsed.videoAspectRatio,
+          frameWidth: parsed.frameWidth,
+          frameHeight: parsed.frameHeight,
+        }
+      } catch {
+        cachedVideoFramesData = null
+      }
+    }
+
+    // 如果没有视频帧缓存或解析失败，从视频重新获取
+    if (!cachedVideoFramesData) {
+      // 获取视频帧和视频信息
+      // 先获取50个原始帧，作为均匀分布的视频帧源
+      videoInfo = await getVideoFrames(videoUrl, 50)
+
+      // 缓存视频帧相关信息（不包括实际frame对象，因为canvas无法直接序列化）
+      const videoFramesCacheData = JSON.stringify({
+        videoAspectRatio: videoInfo.videoAspectRatio,
+        frameWidth: videoInfo.frameWidth,
+        frameHeight: videoInfo.frameHeight,
+      })
+      sessionStorage.setItem(videoFramesCacheKey, videoFramesCacheData)
+    } else {
+      // 如果有视频帧缓存但需要重新获取帧，直接从视频获取
+      videoInfo = await getVideoFrames(videoUrl, 50)
+    }
 
     // 根据容器高度和视频宽高比计算帧宽度
     const containerHeight = frameHeight
@@ -98,15 +135,19 @@ async function initFrameContainer(videoUrl: string) {
       spriteCols,
     )
 
-    // 缓存数据
-    const cacheData = JSON.stringify({
+    // 缓存精灵图数据
+    const spriteCacheData = JSON.stringify({
       spriteInfo,
       videoAspectRatio: videoInfo.videoAspectRatio,
       frameWidth: videoInfo.frameWidth,
       frameHeight: videoInfo.frameHeight,
     })
-    sessionStorage.setItem(cacheKey, cacheData)
-    setTimeout(() => sessionStorage.removeItem(cacheKey), 3600 * 1000)
+    sessionStorage.setItem(spriteCacheKey, spriteCacheData)
+
+    // 设置缓存过期时间（1小时）
+    setTimeout(() => sessionStorage.removeItem(spriteCacheKey), 3600 * 1000)
+    // 视频帧信息缓存可以保存更长时间，单独设置过期
+    setTimeout(() => sessionStorage.removeItem(videoFramesCacheKey), 7200 * 1000)
   }
 
   // 生成每个帧的定位数据
@@ -149,9 +190,46 @@ async function initFrameContainer(videoUrl: string) {
   container.style.cursor = 'pointer'
 }
 
+/**
+ * 防抖函数，限制函数频繁调用
+ * @param func 需要执行的函数
+ * @param delay 延迟时间(ms)
+ * @returns 防抖处理后的函数
+ */
+/**
+ * 防抖函数，限制函数频繁调用
+ * @param func 需要执行的函数
+ * @param delay 延迟时间(ms)
+ * @returns 防抖处理后的函数
+ */
+function debounce<T extends (...args: unknown[]) => unknown>(func: T, delay: number) {
+  let timeoutId: ReturnType<typeof setTimeout>
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeoutId)
+    timeoutId = setTimeout(() => func(...args), delay)
+  }
+}
+
+// 创建防抖版本的初始化函数
+const debouncedInitFrameContainer = debounce(async (url: string) => {
+  await initFrameContainer(url)
+}, 300)
+
+// 窗口大小变化处理
+function handleResize() {
+  debouncedInitFrameContainer(videoUrl)
+}
+
 onMounted(async () => {
   await nextTick()
   await initFrameContainer(videoUrl)
+  // 添加窗口大小变化监听
+  window.addEventListener('resize', handleResize)
+})
+
+onUnmounted(() => {
+  // 移除窗口大小变化监听
+  window.removeEventListener('resize', handleResize)
 })
 </script>
 
