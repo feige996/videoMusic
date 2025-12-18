@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import { ref, onMounted, nextTick } from 'vue'
+import { frameHeight } from '@/data/config'
 import { getVideoFrames, createSpriteImage, calculateFramePosition } from '@/utils/index'
 
 const videoUrl = 'https://oss.laf.run/ukw0y1-site/beautiful-girl-with-audio.mp4'
@@ -22,8 +23,6 @@ async function initFrameContainer(videoUrl: string) {
   if (!container) return
 
   const containerWidth = container.clientWidth
-  // 使用帧间距而非直接使用frameHeight计算帧数
-  const frameSpacing = 2 // 帧间距像素
 
   // 优先从本地缓存取精灵图（避免重复取帧）
   const cacheKey = `video_sprite_${videoUrl}_${containerWidth}`
@@ -57,11 +56,12 @@ async function initFrameContainer(videoUrl: string) {
     // 获取视频帧和视频信息
     videoInfo = await getVideoFrames(videoUrl, 50) // 获取50帧，足够显示在时间轴上
 
-    // 计算实际需要的帧数，基于容器宽度和帧宽度
-    const frameCount = Math.min(
-      50,
-      Math.floor(containerWidth / (videoInfo.frameWidth + frameSpacing)),
-    )
+    // 根据容器高度和视频宽高比计算帧宽度
+    const containerHeight = frameHeight
+    const calculatedFrameWidth = containerHeight * videoInfo.videoAspectRatio
+
+    // 计算实际需要的帧数，基于容器宽度和计算出的帧宽度
+    const frameCount = Math.min(50, Math.floor(containerWidth / calculatedFrameWidth))
 
     // 从50帧中均匀采样实际需要的帧数
     const step = 50 / frameCount
@@ -94,10 +94,12 @@ async function initFrameContainer(videoUrl: string) {
 
   // 生成每个帧的定位数据
   const framesData = []
-  const frameCount = Math.min(
-    50,
-    Math.floor(containerWidth / (videoInfo.frameWidth + frameSpacing)),
-  )
+  // 根据容器高度和视频宽高比计算帧宽度
+  const containerHeight = frameHeight
+  const calculatedFrameWidth = containerHeight * videoInfo.videoAspectRatio
+
+  // 计算实际需要的帧数，基于容器宽度和计算出的帧宽度
+  const frameCount = Math.floor(containerWidth / calculatedFrameWidth)
 
   for (let i = 0; i < frameCount; i++) {
     const position = calculateFramePosition(
@@ -126,7 +128,7 @@ async function initFrameContainer(videoUrl: string) {
 
   // 设置容器样式
   container.style.width = '100%'
-  container.style.height = `${videoInfo.frameHeight}px`
+  container.style.height = '60px' // 使用固定高度
   container.style.cursor = 'pointer'
 }
 
