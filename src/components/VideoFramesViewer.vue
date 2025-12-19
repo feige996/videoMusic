@@ -66,7 +66,7 @@ const initializeWithMetadata = async () => {
 }
 
 watch(
-  () => props.videoUrl,
+  videoUrlRef,
   async (newUrl, oldUrl) => {
     if (newUrl !== oldUrl) {
       // 设置isLoading为true，确保用户看到加载效果
