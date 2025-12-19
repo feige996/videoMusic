@@ -116,6 +116,7 @@ export function useVideoFrames(params: {
         frameHeight = vHeight
         print('使用预加载元信息')
       } else {
+        print('自己获取元信息')
         // 没有预加载元信息时，获取基本视频信息
         const basicVideoInfo = await getVideoFrames(videoUrlRef.value, 1)
         videoAspectRatio = basicVideoInfo.videoAspectRatio
