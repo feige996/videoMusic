@@ -10,6 +10,7 @@ import type {
 } from '@/components/types'
 import type { VideoMetadata } from '@/components/types'
 import { getVideoFrames, createSpriteImage, calculateFramePosition } from '@/utils/videoFrame'
+import { setItemWithQuotaHandling } from '@/utils/storageHelper'
 
 type SpriteRender = {
   url: string
@@ -155,7 +156,8 @@ export function useVideoFrames(params: {
         timestamp: Date.now(),
         hasAudio: preloadedMetadata?.value?.hasAudio || false,
       }
-      await videoFrameStore.setItem(videoMetaCacheKey, metaData)
+      // 使用带存储容量处理的工具函数保存数据
+      await setItemWithQuotaHandling(videoFrameStore, videoMetaCacheKey, metaData)
       fullFrameMeta.value = metaData
 
       const spriteDataCache: CachedFullSpriteData = {
@@ -166,7 +168,7 @@ export function useVideoFrames(params: {
         totalFrames,
         timestamp: Date.now(),
       }
-      await videoFrameStore.setItem(spriteCacheKey, spriteDataCache)
+      await setItemWithQuotaHandling(videoFrameStore, spriteCacheKey, spriteDataCache)
 
       fullVideoInfo.frames.forEach((frame) => {
         frame.width = 0
