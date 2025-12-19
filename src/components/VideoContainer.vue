@@ -89,7 +89,7 @@ defineExpose({
       class="loading-state px-4 py-2 bg-blue-50 text-blue-700 rounded-md"
     >
       <div v-if="isLoadingMetadata">加载视频信息中...</div>
-      <div v-else>加载视频时间线中...</div>
+      <div v-else>加载视频帧中...</div>
     </div>
 
     <!-- 错误提示 -->
