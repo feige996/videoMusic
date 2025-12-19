@@ -1,4 +1,4 @@
-import { ref, type Ref } from 'vue'
+import { ref, type Ref, onUnmounted } from 'vue'
 import { frameHeight, VIDEO_FRAME_CACHE_EXPIRE, SPRITE_CACHE_EXPIRE } from '@/data/config'
 import { throttle } from 'lodash-es'
 import localforage from 'localforage'
@@ -292,6 +292,25 @@ export function useVideoFrames(params: {
       ;(throttledSample as HasCancel).cancel()
     }
   }
+
+  /**
+   * 初始化钩子
+   * 在hook创建时自动添加窗口resize事件监听
+   * 在组件卸载时自动清理资源
+   */
+  function init() {
+    // 添加窗口resize事件监听
+    window.addEventListener('resize', handleResize)
+
+    // 使用onUnmounted钩子自动处理清理逻辑
+    onUnmounted(() => {
+      window.removeEventListener('resize', handleResize)
+      cleanupResources()
+    })
+  }
+
+  // 自动调用init函数设置事件监听和清理逻辑
+  init()
 
   return {
     initializeVideoFrames,

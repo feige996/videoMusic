@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { ref, toRef, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, toRef, nextTick, watch } from 'vue'
 import type { FrameItem } from '@/components/types'
 import type { VideoMetadata } from '@/components/types'
 import { useVideoFrames } from '@/composables/useVideoFrames'
@@ -41,7 +41,7 @@ watch(isLoading, (newValue) => {
 })
 
 const videoUrlRef = toRef(props, 'videoUrl')
-const { initializeVideoFrames, cleanupResources, handleResize } = useVideoFrames({
+const { initializeVideoFrames, cleanupResources } = useVideoFrames({
   videoUrl: videoUrlRef,
   frameContainer,
   frameData,
@@ -65,11 +65,6 @@ const initializeWithMetadata = async () => {
   }
 }
 
-onMounted(() => {
-  // 只添加resize监听器，初始化逻辑移至watchEffect
-  window.addEventListener('resize', handleResize)
-})
-
 watch(
   () => props.videoUrl,
   async (newUrl, oldUrl) => {
@@ -79,9 +74,6 @@ watch(
       cleanupResources()
       // 重置预加载元信息引用
       preloadedMetadataRef.value = props.preloadedMetadata
-      // 等待元信息更新和DOM更新后，显式调用初始化函数
-      await nextTick()
-      // 直接调用初始化函数，不再等待watchEffect触发
       if (newUrl) {
         await initializeWithMetadata()
       }
@@ -89,11 +81,6 @@ watch(
   },
   { immediate: true },
 )
-
-onUnmounted(() => {
-  window.removeEventListener('resize', handleResize)
-  cleanupResources()
-})
 </script>
 
 <template>
