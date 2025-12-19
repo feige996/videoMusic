@@ -66,7 +66,6 @@ const initializeWithMetadata = async () => {
 }
 
 onMounted(async () => {
-  await initializeWithMetadata()
   window.addEventListener('resize', handleResize)
 })
 
