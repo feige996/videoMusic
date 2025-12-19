@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { ref, toRef, onMounted, onUnmounted, nextTick, watch, watchEffect } from 'vue'
+import { ref, toRef, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import type { FrameItem } from '@/components/types'
 import type { VideoMetadata } from '@/components/types'
 import { useVideoFrames } from '@/composables/useVideoFrames'
@@ -70,15 +70,6 @@ onMounted(() => {
   window.addEventListener('resize', handleResize)
 })
 
-// 当videoUrl存在且容器已渲染时初始化视频帧
-watchEffect(async () => {
-  if (videoUrlRef.value && frameContainer.value) {
-    // 无论是否有预加载元信息，都初始化视频帧
-    // 注：useVideoFrames内部会判断是否使用预加载元信息
-    await initializeWithMetadata()
-  }
-})
-
 watch(
   () => props.videoUrl,
   async (newUrl, oldUrl) => {
@@ -96,7 +87,7 @@ watch(
       }
     }
   },
-  { immediate: false },
+  { immediate: true },
 )
 
 onUnmounted(() => {
