@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { frameHeight } from '@/data/config' // 容器高度配置
 // import longVideo from '@/assets/long.mp4' // 本地视频资源
 import { debounce } from 'lodash-es'
+import localforage from 'localforage'
 import type {
   SpriteInfo,
   CachedFullFrameData,
@@ -59,28 +60,35 @@ async function initPreciseFramePool() {
 
   // 1. 读取缓存的视频元信息
   let cachedMeta: CachedFullFrameData | null = null
-  const storedMeta = sessionStorage.getItem(videoMetaCacheKey)
-  if (storedMeta) {
-    const parsed = JSON.parse(storedMeta)
-    if (Date.now() - parsed.timestamp < 7200 * 1000) {
-      // 2小时过期
-      cachedMeta = parsed
-    } else {
-      sessionStorage.removeItem(videoMetaCacheKey)
+  try {
+    const storedMeta = await localforage.getItem<CachedFullFrameData>(videoMetaCacheKey)
+    if (storedMeta) {
+      if (Date.now() - storedMeta.timestamp < 7200 * 1000) {
+        // 2小时过期
+        cachedMeta = storedMeta
+      } else {
+        await localforage.removeItem(videoMetaCacheKey)
+      }
     }
+  } catch (e) {
+    console.warn('读取视频元信息缓存失败:', e)
   }
 
   // 2. 读取缓存的全量精灵图
   let cachedSprite: CachedFullSpriteData | null = null
-  const storedSprite = sessionStorage.getItem(spriteCacheKey)
-  if (storedSprite) {
-    const parsed = JSON.parse(storedSprite)
-    if (Date.now() - parsed.timestamp < 3600 * 1000) {
-      // 1小时过期
-      cachedSprite = parsed
-    } else {
-      sessionStorage.removeItem(spriteCacheKey)
+  try {
+    cachedSprite = await localforage.getItem<CachedFullSpriteData>(spriteCacheKey)
+    if (cachedSprite) {
+      if (Date.now() - cachedSprite.timestamp < 3600 * 1000) {
+        // 1小时过期
+        // 缓存已有效，不需要操作
+      } else {
+        await localforage.removeItem(spriteCacheKey)
+        cachedSprite = null
+      }
     }
+  } catch (e) {
+    console.warn('读取精灵图缓存失败:', e)
   }
 
   // 3. 缓存命中：直接返回
@@ -131,11 +139,17 @@ async function initPreciseFramePool() {
       duration,
       timestamp: Date.now(),
     }
-    sessionStorage.setItem(videoMetaCacheKey, JSON.stringify(metaData))
+
+    try {
+      await localforage.setItem(videoMetaCacheKey, metaData)
+    } catch (e) {
+      console.warn('存储视频元信息失败，可能是存储空间不足:', e)
+    }
+
     fullFrameMeta.value = metaData
 
     // 6. 缓存全量精灵图
-    const spriteData: CachedFullSpriteData = {
+    const spriteCacheData: CachedFullSpriteData = {
       spriteInfo: fullSpriteInfo,
       videoAspectRatio: fullVideoInfo.videoAspectRatio,
       frameWidth: fullVideoInfo.frameWidth,
@@ -143,7 +157,12 @@ async function initPreciseFramePool() {
       totalFrames,
       timestamp: Date.now(),
     }
-    sessionStorage.setItem(spriteCacheKey, JSON.stringify(spriteData))
+
+    try {
+      await localforage.setItem(spriteCacheKey, spriteCacheData)
+    } catch (e) {
+      console.warn('存储精灵图缓存失败，可能是存储空间不足:', e)
+    }
 
     // 清理临时Canvas，释放内存
     fullVideoInfo.frames.forEach((frame) => {
@@ -212,18 +231,26 @@ async function sampleFramesFromPool() {
 
   // 6. 读取精灵图缓存（带校验）
   const spriteCacheKey = `video_sprite_${videoUrl}_${frameHeight}`
-  const storedSprite = sessionStorage.getItem(spriteCacheKey)
-  if (!storedSprite) {
-    console.warn('精灵图缓存不存在，跳过采样')
+  let spriteInfo: SpriteInfo | null = null
+
+  try {
+    const cachedSprite = await localforage.getItem<CachedFullSpriteData>(spriteCacheKey)
+    if (!cachedSprite || Date.now() - cachedSprite.timestamp >= 3600 * 1000) {
+      if (cachedSprite) {
+        await localforage.removeItem(spriteCacheKey)
+      }
+      console.warn('精灵图缓存不存在或已过期，跳过采样')
+      return
+    }
+    spriteInfo = cachedSprite.spriteInfo
+  } catch (e) {
+    console.error('读取或解析精灵图缓存失败：', e)
     return
   }
 
-  let spriteInfo: SpriteInfo
-  try {
-    const parsed = JSON.parse(storedSprite) as CachedFullSpriteData
-    spriteInfo = parsed.spriteInfo
-  } catch (e) {
-    console.error('解析精灵图缓存失败：', e)
+  // 确保spriteInfo有效
+  if (!spriteInfo) {
+    console.warn('精灵图信息无效，跳过采样')
     return
   }
 

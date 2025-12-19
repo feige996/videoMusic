@@ -18,6 +18,7 @@
     "format": "prettier --write --experimental-cli src/"
   },
   "dependencies": {
+    "localforage": "^1.10.0",
     "lodash-es": "^4.17.22",
     "pinia": "^3.0.4",
     "vue": "^3.5.25",
