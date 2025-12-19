@@ -143,12 +143,19 @@ async function initPreciseFramePool() {
 
     // 生成全量精灵图（列数最多10列，避免行数过多）
     const spriteCols = Math.min(totalFrames, 10)
+
+    // 开始计时 - 测量精灵图生成时间
+    const spriteGenerateStartTime = performance.now()
     const fullSpriteInfo = await createSpriteImage(
       fullVideoInfo.frames,
       fullVideoInfo.frameWidth,
       fullVideoInfo.frameHeight,
       spriteCols,
     )
+    // 结束计时并打印
+    const spriteGenerateEndTime = performance.now()
+    const spriteGenerateDuration = spriteGenerateEndTime - spriteGenerateStartTime
+    console.log(`精灵图生成耗时: ${spriteGenerateDuration.toFixed(2)}ms, 帧数量: ${totalFrames}`)
 
     // 5. 缓存视频元信息
     const metaData: CachedFullFrameData = {
