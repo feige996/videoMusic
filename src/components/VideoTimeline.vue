@@ -23,6 +23,7 @@ const { initializeVideoFrames, cleanupResources, handleResize } = useVideoFrames
   frameData,
   spriteData,
   isLoading,
+  log: true,
 })
 
 const handleFrameImgError = (index: number) => {

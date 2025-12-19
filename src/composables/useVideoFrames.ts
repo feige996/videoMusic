@@ -25,8 +25,13 @@ export function useVideoFrames(params: {
   frameData: Ref<FrameItem[]>
   spriteData: Ref<SpriteRender | null>
   isLoading: Ref<boolean>
+  log?: boolean
 }) {
   const { videoUrl, frameContainer, frameData, spriteData, isLoading } = params
+  const logEnabled = params.log === true
+  const print = (message: string) => {
+    if (logEnabled) console.log(message)
+  }
   const MAX_SCREEN_WIDTH = window.screen.width * 1.2
   const FRAME_SURPLUS = 5
 
@@ -73,24 +78,34 @@ export function useVideoFrames(params: {
     } catch { }
 
     if (cachedMeta && cachedSprite) {
+      print('缓存命中')
       fullFrameMeta.value = cachedMeta
       return { meta: cachedMeta, sprite: cachedSprite.spriteInfo }
     }
 
     isLoading.value = true
     try {
+      const t0 = performance.now()
       const basicVideoInfo = await getVideoFrames(videoUrl, 1)
+      const t1 = performance.now()
+      print(`元信息耗时: ${(t1 - t0).toFixed(2)}ms`)
       const { videoAspectRatio, duration } = basicVideoInfo
       const totalFrames = calculateTotalFrames(videoAspectRatio)
+      const t2 = performance.now()
       const fullVideoInfo = await getVideoFrames(videoUrl, totalFrames)
+      const t3 = performance.now()
+      print(`抽取帧耗时: ${(t3 - t2).toFixed(2)}ms, 帧数: ${totalFrames}`)
 
       const spriteCols = Math.min(totalFrames, 10)
+      const t4 = performance.now()
       const fullSpriteInfo = await createSpriteImage(
         fullVideoInfo.frames,
         fullVideoInfo.frameWidth,
         fullVideoInfo.frameHeight,
         spriteCols,
       )
+      const t5 = performance.now()
+      print(`合成雪碧图耗时: ${(t5 - t4).toFixed(2)}ms`)
 
       const metaData: CachedFullFrameData = {
         videoAspectRatio: fullVideoInfo.videoAspectRatio,
@@ -200,6 +215,7 @@ export function useVideoFrames(params: {
       gap: '0',
       scrollbarWidth: 'thin',
     })
+    print(`采样完成: 帧数 ${actualNeed}, 比例 ${scale.toFixed(3)}`)
   }
 
   const throttledSample = throttle(async () => {
