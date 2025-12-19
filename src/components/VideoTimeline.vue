@@ -65,17 +65,17 @@ const initializeWithMetadata = async () => {
   }
 }
 
-onMounted(async () => {
+onMounted(() => {
+  // 只添加resize监听器，初始化逻辑移至watchEffect
   window.addEventListener('resize', handleResize)
 })
 
-// 当预加载的元信息可用时，初始化视频帧
+// 当videoUrl存在且容器已渲染时初始化视频帧
 watchEffect(async () => {
-  if (preloadedMetadataRef.value && videoUrlRef.value) {
-    // 确保容器已经渲染
-    if (frameContainer.value) {
-      await initializeWithMetadata()
-    }
+  if (videoUrlRef.value && frameContainer.value) {
+    // 无论是否有预加载元信息，都初始化视频帧
+    // 注：useVideoFrames内部会判断是否使用预加载元信息
+    await initializeWithMetadata()
   }
 })
 
