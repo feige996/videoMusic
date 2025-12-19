@@ -104,13 +104,25 @@ async function initPreciseFramePool() {
   // 4. 缓存未命中：提取视频帧并生成精灵图
   isLoading.value = true
   try {
+    const basicVideoInfoGenerateStartTime = performance.now()
     const basicVideoInfo = await getVideoFrames(videoUrl, 1)
+    const basicVideoInfoGenerateEndTime = performance.now()
+    const basicVideoInfoGenerateDuration =
+      basicVideoInfoGenerateEndTime - basicVideoInfoGenerateStartTime
+    console.log(`视频元信息提取耗时: ${basicVideoInfoGenerateDuration.toFixed(2)}ms`)
+
     const { videoAspectRatio, duration } = basicVideoInfo
     // 使用容器宽度或窗口宽度作为回退
     const containerWidth = frameContainer.value?.clientWidth || window.innerWidth
     const totalFrames = calculateTotalFrames(videoAspectRatio, containerWidth)
+    const fullVideoInfoGenerateStartTime = performance.now()
     const fullVideoInfo = await getVideoFrames(videoUrl, totalFrames)
-    console.log(fullVideoInfo, totalFrames)
+    const fullVideoInfoGenerateEndTime = performance.now()
+    const fullVideoInfoGenerateDuration =
+      fullVideoInfoGenerateEndTime - fullVideoInfoGenerateStartTime
+    console.log(
+      `视频全量帧提取耗时: ${fullVideoInfoGenerateDuration.toFixed(2)}ms, 帧数量: ${totalFrames}`,
+    )
 
     // 生成全量精灵图
     const spriteCols = Math.min(totalFrames, 10)
