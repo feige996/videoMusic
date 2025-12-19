@@ -15,8 +15,8 @@ declare module 'vue' {
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     TestDemo: typeof import('./src/components/TestDemo.vue')['default']
-    VideoPlayer: typeof import('./src/components/VideoPlayer.vue')['default']
-    VideoTimeline: typeof import('./src/components/VideoTimeline.vue')['default']
+    VideoContainer: typeof import('./src/components/VideoContainer.vue')['default']
+    VideoFramesViewer: typeof import('./src/components/VideoFramesViewer.vue')['default']
   }
 }
 
@@ -25,6 +25,6 @@ declare global {
   const RouterLink: typeof import('vue-router')['RouterLink']
   const RouterView: typeof import('vue-router')['RouterView']
   const TestDemo: typeof import('./src/components/TestDemo.vue')['default']
-  const VideoPlayer: typeof import('./src/components/VideoPlayer.vue')['default']
-  const VideoTimeline: typeof import('./src/components/VideoTimeline.vue')['default']
+  const VideoContainer: typeof import('./src/components/VideoContainer.vue')['default']
+  const VideoFramesViewer: typeof import('./src/components/VideoFramesViewer.vue')['default']
 }

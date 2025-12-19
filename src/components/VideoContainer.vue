@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, nextTick, watch } from 'vue'
-import VideoTimeline from './VideoTimeline.vue'
+import VideoFramesViewer from './VideoFramesViewer.vue'
 import { useVideoMetadata } from '@/composables/useVideoMetadata'
 
 // Props定义
@@ -106,11 +106,11 @@ defineExpose({
       </div>
     </div>
 
-    <!-- 视频时间线 -->
-    <VideoTimeline
+    <!-- 视频帧查看器 -->
+    <VideoFramesViewer
       :video-url="videoUrl"
       :preloaded-metadata="videoMetadata"
-      :is-loading="isLoadingTimeline"
+      @update:is-loading="isLoadingTimeline = $event"
     />
 
     <!-- 音频波形（如果有音频） -->
