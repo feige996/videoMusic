@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { frameHeight } from '@/data/config' // 容器高度配置
 // import longVideo from '@/assets/long.mp4' // 本地视频资源
-import { debounce } from 'lodash-es'
+import { throttle } from 'lodash-es'
 import localforage from 'localforage' // 引入localforage
 import type {
   SpriteInfo,
@@ -274,9 +274,10 @@ const handleFrameImgError = (index: number) => {
   // 可选：降级处理（如显示占位图）
 }
 
-// ===================== 防抖与监听 =====================
-// 防抖采样（仅内存操作，缩短防抖时间）
-const debouncedSample = debounce(async () => {
+// ===================== 节流与监听 =====================
+// 节流采样（resize事件更适合使用节流而非防抖）
+// 节流能保证在调整过程中也能平滑更新，避免调整结束后才更新的延迟感
+const throttledSample = throttle(async () => {
   if (isLoading.value) return
   await sampleFramesFromPool()
 }, 16)
@@ -284,7 +285,7 @@ const debouncedSample = debounce(async () => {
 // 窗口resize处理
 function handleResize() {
   if (frameContainer.value) {
-    debouncedSample()
+    throttledSample()
   }
 }
 
@@ -298,7 +299,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
-  debouncedSample.cancel() // 清理防抖定时器
+  throttledSample.cancel() // 清理节流定时器
 })
 </script>
 
