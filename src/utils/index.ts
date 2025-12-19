@@ -95,7 +95,7 @@ export async function getVideoFrames(videoUrl: string, frameCount: number) {
 
         frames.push(canvas)
         success = true
-      } catch (e) {
+      } catch {
         // 失败则偏移0.01s重试
         targetTime += 0.01
         retryCount++
