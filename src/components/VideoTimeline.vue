@@ -3,6 +3,13 @@ import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { frameHeight } from '@/data/config' // 容器高度配置
 import longVideo from '@/assets/long.mp4' // 本地视频资源
 import { debounce } from 'lodash-es'
+import type {
+  SpriteInfo,
+  CachedFullFrameData,
+  CachedFullSpriteData,
+  FrameItem,
+} from '@/components/types' // 新增：引入类型定义
+
 import { getVideoFrames, createSpriteImage, calculateFramePosition } from '@/utils/videoFrame' // 抽离的视频帧工具函数
 
 // ===================== 常量配置 =====================
@@ -10,49 +17,6 @@ import { getVideoFrames, createSpriteImage, calculateFramePosition } from '@/uti
 const MAX_SCREEN_WIDTH = window.screen.width * 1.2
 // 帧数余量（应对浮点精度/微小超界）
 const FRAME_SURPLUS = 5
-
-// ===================== 类型定义 =====================
-interface VideoFramesInfo {
-  frames: HTMLCanvasElement[]
-  videoAspectRatio: number
-  frameWidth: number
-  frameHeight: number
-  duration: number // 视频时长
-}
-
-interface SpriteInfo {
-  spriteUrl: string
-  rows: number
-  cols: number
-}
-
-interface CachedFullFrameData {
-  videoAspectRatio: number
-  frameWidth: number
-  frameHeight: number
-  totalFrames: number // 精准计算的全量帧数
-  duration: number
-  timestamp: number
-}
-
-interface CachedFullSpriteData {
-  spriteInfo: SpriteInfo
-  videoAspectRatio: number
-  frameWidth: number
-  frameHeight: number
-  totalFrames: number
-  timestamp: number
-}
-
-interface FrameItem {
-  index: number
-  row: number
-  col: number
-  dataThumb: string
-  displayWidth: number
-  displayHeight: number
-  scale: number // 新增：传递缩放比例到模板
-}
 
 // ===================== 响应式数据 =====================
 const videoUrl = longVideo // 视频地址（可替换为远程URL）
