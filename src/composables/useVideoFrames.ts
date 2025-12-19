@@ -1,0 +1,243 @@
+import { ref, type Ref } from 'vue'
+import { frameHeight, VIDEO_FRAME_CACHE_EXPIRE, SPRITE_CACHE_EXPIRE } from '@/data/config'
+import { throttle } from 'lodash-es'
+import localforage from 'localforage'
+import type {
+  SpriteInfo,
+  CachedFullFrameData,
+  CachedFullSpriteData,
+  FrameItem,
+} from '@/components/types'
+import { getVideoFrames, createSpriteImage, calculateFramePosition } from '@/utils/videoFrame'
+
+type SpriteRender = {
+  url: string
+  frameWidth: number
+  frameHeight: number
+  cols: number
+  rows: number
+  scale: number
+}
+
+export function useVideoFrames(params: {
+  videoUrl: string
+  frameContainer: Ref<HTMLElement | null>
+  frameData: Ref<FrameItem[]>
+  spriteData: Ref<SpriteRender | null>
+  isLoading: Ref<boolean>
+}) {
+  const { videoUrl, frameContainer, frameData, spriteData, isLoading } = params
+  const MAX_SCREEN_WIDTH = window.screen.width * 1.2
+  const FRAME_SURPLUS = 5
+
+  const videoFrameStore = localforage.createInstance({
+    name: 'VideoFrameStore',
+    storeName: 'videoFrames',
+    driver: localforage.INDEXEDDB,
+    version: 1.0,
+  })
+
+  const fullFrameMeta = ref<CachedFullFrameData | null>(null)
+
+  function calculateTotalFrames(videoAspectRatio: number): number {
+    const singleFrameWidth = frameHeight * videoAspectRatio
+    const baseFrames = Math.ceil(MAX_SCREEN_WIDTH / singleFrameWidth)
+    const totalFrames = baseFrames + FRAME_SURPLUS
+    return Math.max(totalFrames, 10)
+  }
+
+  async function initPreciseFramePool() {
+    if (fullFrameMeta.value) return fullFrameMeta.value
+
+    const videoMetaCacheKey = `video_meta_${videoUrl}_${frameHeight}`
+    const spriteCacheKey = `video_sprite_${videoUrl}_${frameHeight}`
+
+    let cachedMeta: CachedFullFrameData | null = null
+    try {
+      const storedMeta = await videoFrameStore.getItem<CachedFullFrameData>(videoMetaCacheKey)
+      if (storedMeta && Date.now() - storedMeta.timestamp < VIDEO_FRAME_CACHE_EXPIRE) {
+        cachedMeta = storedMeta
+      } else if (storedMeta) {
+        await videoFrameStore.removeItem(videoMetaCacheKey)
+      }
+    } catch { }
+
+    let cachedSprite: CachedFullSpriteData | null = null
+    try {
+      const storedSprite = await videoFrameStore.getItem<CachedFullSpriteData>(spriteCacheKey)
+      if (storedSprite && Date.now() - storedSprite.timestamp < SPRITE_CACHE_EXPIRE) {
+        cachedSprite = storedSprite
+      } else if (storedSprite) {
+        await videoFrameStore.removeItem(spriteCacheKey)
+      }
+    } catch { }
+
+    if (cachedMeta && cachedSprite) {
+      fullFrameMeta.value = cachedMeta
+      return { meta: cachedMeta, sprite: cachedSprite.spriteInfo }
+    }
+
+    isLoading.value = true
+    try {
+      const basicVideoInfo = await getVideoFrames(videoUrl, 1)
+      const { videoAspectRatio, duration } = basicVideoInfo
+      const totalFrames = calculateTotalFrames(videoAspectRatio)
+      const fullVideoInfo = await getVideoFrames(videoUrl, totalFrames)
+
+      const spriteCols = Math.min(totalFrames, 10)
+      const fullSpriteInfo = await createSpriteImage(
+        fullVideoInfo.frames,
+        fullVideoInfo.frameWidth,
+        fullVideoInfo.frameHeight,
+        spriteCols,
+      )
+
+      const metaData: CachedFullFrameData = {
+        videoAspectRatio: fullVideoInfo.videoAspectRatio,
+        frameWidth: fullVideoInfo.frameWidth,
+        frameHeight: fullVideoInfo.frameHeight,
+        totalFrames,
+        duration,
+        timestamp: Date.now(),
+      }
+      await videoFrameStore.setItem(videoMetaCacheKey, metaData)
+      fullFrameMeta.value = metaData
+
+      const spriteDataCache: CachedFullSpriteData = {
+        spriteInfo: fullSpriteInfo,
+        videoAspectRatio: fullVideoInfo.videoAspectRatio,
+        frameWidth: fullVideoInfo.frameWidth,
+        frameHeight: fullVideoInfo.frameHeight,
+        totalFrames,
+        timestamp: Date.now(),
+      }
+      await videoFrameStore.setItem(spriteCacheKey, spriteDataCache)
+
+      fullVideoInfo.frames.forEach((frame) => {
+        frame.width = 0
+        frame.height = 0
+      })
+
+      return { meta: metaData, sprite: fullSpriteInfo }
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  async function sampleFramesFromPool() {
+    const container = frameContainer.value
+    if (!container || !fullFrameMeta.value) return
+
+    const {
+      videoAspectRatio,
+      totalFrames,
+      frameWidth: originalFrameWidth,
+      frameHeight: originalFrameHeight,
+    } = fullFrameMeta.value
+    const containerWidth = container.clientWidth
+    const containerHeight = frameHeight
+
+    const displayFrameWidth = containerHeight * videoAspectRatio
+    const displayFrameHeight = containerHeight
+    const scale = displayFrameHeight / originalFrameHeight
+
+    const needFrameCount = Math.max(1, Math.ceil(containerWidth / displayFrameWidth))
+    const actualNeed = Math.min(needFrameCount, totalFrames)
+
+    const selectedIndexes: number[] = []
+    for (let i = 0; i < actualNeed; i++) {
+      const ratio = i / Math.max(1, actualNeed - 1)
+      const index = Math.floor(ratio * (totalFrames - 1))
+      selectedIndexes.push(index)
+    }
+
+    const spriteCacheKey = `video_sprite_${videoUrl}_${frameHeight}`
+    let spriteInfo: SpriteInfo | null = null
+    try {
+      const storedSprite = await videoFrameStore.getItem<CachedFullSpriteData>(spriteCacheKey)
+      if (!storedSprite) return
+      spriteInfo = storedSprite.spriteInfo
+    } catch {
+      return
+    }
+    if (!spriteInfo) return
+
+    const framesData: FrameItem[] = []
+    selectedIndexes.forEach((fullIndex, displayIndex) => {
+      const position = calculateFramePosition(
+        fullIndex,
+        spriteInfo.cols,
+        originalFrameWidth,
+        originalFrameHeight,
+        totalFrames,
+      )
+      framesData.push({
+        index: displayIndex,
+        row: position.row,
+        col: position.col,
+        dataThumb: position.dataThumb || '',
+        displayWidth: displayFrameWidth,
+        displayHeight: displayFrameHeight,
+        scale,
+      })
+    })
+
+    frameData.value = framesData
+    spriteData.value = {
+      url: spriteInfo.spriteUrl || '',
+      frameWidth: originalFrameWidth,
+      frameHeight: originalFrameHeight,
+      cols: spriteInfo.cols,
+      rows: spriteInfo.rows,
+      scale,
+    }
+
+    Object.assign(container.style, {
+      width: '100%',
+      height: `${containerHeight}px`,
+      display: 'flex',
+      overflowX: 'auto',
+      gap: '0',
+      scrollbarWidth: 'thin',
+    })
+  }
+
+  const throttledSample = throttle(async () => {
+    if (isLoading.value) return
+    await sampleFramesFromPool()
+  }, 16)
+
+  function handleResize() {
+    if (frameContainer.value) {
+      throttledSample()
+    }
+  }
+
+  async function initializeVideoFrames() {
+    if (!videoUrl) return
+    try {
+      await initPreciseFramePool()
+      await sampleFramesFromPool()
+    } catch {
+      cleanupResources()
+    }
+  }
+
+  function cleanupResources() {
+    if (frameData.value && frameData.value.length > 0) {
+      frameData.value = []
+    }
+    fullFrameMeta.value = null
+    spriteData.value = null
+    type HasCancel = { cancel: () => void }
+    if (throttledSample && typeof (throttledSample as HasCancel).cancel === 'function') {
+      ; (throttledSample as HasCancel).cancel()
+    }
+  }
+
+  return {
+    initializeVideoFrames,
+    cleanupResources,
+    handleResize,
+  }
+}
