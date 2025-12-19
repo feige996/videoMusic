@@ -36,12 +36,15 @@ export async function cleanupOldestCache(
     const cacheItems: Array<{ key: string; timestamp: number }> = []
     for (const key of keys) {
       if (typeof key === 'string') {
-        const item = await storage.getItem<{
-          data: VideoMetadata
-          timestamp: number
-        }>(key)
-        if (item) {
-          cacheItems.push({ key, timestamp: item.timestamp })
+        // 获取存储项并安全地检查timestamp属性
+        const item = await storage.getItem<{ timestamp: number }>(key)
+        if (
+          item &&
+          typeof item === 'object' &&
+          'timestamp' in item &&
+          typeof item.timestamp === 'number'
+        ) {
+          cacheItems.push({ key, timestamp: item.timestamp as number })
         }
       }
     }
