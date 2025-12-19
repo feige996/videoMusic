@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { frameHeight } from '@/data/config' // 容器高度配置
-import longVideo from '@/assets/long.mp4' // 本地视频资源
+// import longVideo from '@/assets/long.mp4' // 本地视频资源
 import { debounce } from 'lodash-es'
 import type {
   SpriteInfo,
@@ -19,7 +19,8 @@ const MAX_SCREEN_WIDTH = window.screen.width * 1.2
 const FRAME_SURPLUS = 5
 
 // ===================== 响应式数据 =====================
-const videoUrl = longVideo // 视频地址（可替换为远程URL）
+// const videoUrl = longVideo // 视频地址（可替换为远程URL）
+const videoUrl = 'https://oss.laf.run/ukw0y1-site/beautiful-girl-with-audio.mp4' // 视频地址（可替换为远程URL）
 const frameContainer = ref<HTMLElement | null>(null)
 const frameData = ref<FrameItem[]>([])
 const spriteData = ref<{
