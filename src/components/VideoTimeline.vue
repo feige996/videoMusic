@@ -14,8 +14,6 @@ import type {
 import { getVideoFrames, createSpriteImage, calculateFramePosition } from '@/utils/videoFrame'
 
 // ===================== 常量配置 =====================
-// 最大支持的屏幕宽度（可根据业务调整）
-const MAX_SCREEN_WIDTH = window.screen.width * 1.2
 // 帧数余量（应对浮点精度/微小超界）
 const FRAME_SURPLUS = 5
 
@@ -45,13 +43,14 @@ const fullFrameMeta = ref<CachedFullFrameData | null>(null)
 
 // ===================== 核心方法 =====================
 /**
- * 根据frameHeight和最大屏幕宽度，计算所需的全量帧数
+ * 根据frameHeight和容器宽度，计算所需的全量帧数
  * @param videoAspectRatio 视频宽高比
+ * @param containerWidth 容器宽度
  * @returns 精准的全量帧数
  */
-function calculateTotalFrames(videoAspectRatio: number): number {
+function calculateTotalFrames(videoAspectRatio: number, containerWidth: number): number {
   const singleFrameWidth = frameHeight * videoAspectRatio
-  const baseFrames = Math.ceil(MAX_SCREEN_WIDTH / singleFrameWidth)
+  const baseFrames = Math.ceil(containerWidth / singleFrameWidth)
   const totalFrames = baseFrames + FRAME_SURPLUS
   return Math.max(totalFrames, 10) // 兜底：至少10帧
 }
@@ -107,7 +106,9 @@ async function initPreciseFramePool() {
   try {
     const basicVideoInfo = await getVideoFrames(videoUrl, 1)
     const { videoAspectRatio, duration } = basicVideoInfo
-    const totalFrames = calculateTotalFrames(videoAspectRatio)
+    // 使用容器宽度或窗口宽度作为回退
+    const containerWidth = frameContainer.value?.clientWidth || window.innerWidth
+    const totalFrames = calculateTotalFrames(videoAspectRatio, containerWidth)
     const fullVideoInfo = await getVideoFrames(videoUrl, totalFrames)
     console.log(fullVideoInfo, totalFrames)
 
