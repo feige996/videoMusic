@@ -98,8 +98,6 @@ onUnmounted(() => {
 
 <template>
   <div class="timeline-wrapper">
-    <!-- 加载状态提示 -->
-    <div v-if="isLoading" class="mb-2 text-gray-600">加载视频帧中...</div>
     <!-- 视频帧容器 -->
     <div
       ref="frameContainer"

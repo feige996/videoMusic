@@ -23,7 +23,7 @@ const isLoadingTimeline = ref(false)
 const error = ref<string | null>(null)
 
 /**
- * 加载视频信息和时间线
+ * 加载视频信息
  */
 async function loadVideoInfo() {
   if (!props.videoUrl) return
