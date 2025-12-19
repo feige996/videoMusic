@@ -2,11 +2,12 @@
 import VideoContainer from './components/VideoContainer.vue'
 
 import localVideo from '@/assets/long.mp4' // 本地视频资源
+import shortVideo from '@/assets/10s.mp4' // 本地视频资源
 const remoteVideo = 'https://oss.laf.run/ukw0y1-site/beautiful-girl-with-audio.mp4' // 远程资源
 
-const longVideo = ref(localVideo)
+const longVideo = ref(shortVideo)
 const toggleVideo = () => {
-  longVideo.value = longVideo.value === localVideo ? remoteVideo : localVideo
+  longVideo.value = longVideo.value === localVideo ? remoteVideo : shortVideo
 }
 </script>
 
