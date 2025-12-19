@@ -3,21 +3,29 @@ import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { frameHeight } from '@/data/config' // 容器高度配置
 // import longVideo from '@/assets/long.mp4' // 本地视频资源
 import { debounce } from 'lodash-es'
-import localforage from 'localforage'
+import localforage from 'localforage' // 引入localforage
 import type {
   SpriteInfo,
   CachedFullFrameData,
   CachedFullSpriteData,
   FrameItem,
-} from '@/components/types' // 新增：引入类型定义
+} from '@/components/types'
 
-import { getVideoFrames, createSpriteImage, calculateFramePosition } from '@/utils/videoFrame' // 抽离的视频帧工具函数
+import { getVideoFrames, createSpriteImage, calculateFramePosition } from '@/utils/videoFrame'
 
 // ===================== 常量配置 =====================
 // 最大支持的屏幕宽度（可根据业务调整）
 const MAX_SCREEN_WIDTH = window.screen.width * 1.2
 // 帧数余量（应对浮点精度/微小超界）
 const FRAME_SURPLUS = 5
+
+// 初始化localforage（配置IndexedDB存储）
+const videoFrameStore = localforage.createInstance({
+  name: 'VideoFrameStore', // 数据库名称
+  storeName: 'videoFrames', // 存储表名
+  driver: localforage.INDEXEDDB, // 强制使用IndexedDB
+  version: 1.0,
+})
 
 // ===================== 响应式数据 =====================
 // const videoUrl = longVideo // 视频地址（可替换为远程URL）
@@ -30,10 +38,9 @@ const spriteData = ref<{
   frameHeight: number
   cols: number
   rows: number
-  scale: number // 新增：传递缩放比例到模板
+  scale: number
 } | null>(null)
 const isLoading = ref(false)
-// 内存缓存全量帧元信息（避免重复计算）
 const fullFrameMeta = ref<CachedFullFrameData | null>(null)
 
 // ===================== 核心方法 =====================
@@ -50,7 +57,7 @@ function calculateTotalFrames(videoAspectRatio: number): number {
 }
 
 /**
- * 预生成精准的全量帧池（仅执行一次，依赖frameHeight）
+ * 预生成精准的全量帧池（替换为localforage存储）
  */
 async function initPreciseFramePool() {
   if (fullFrameMeta.value) return fullFrameMeta.value
@@ -58,37 +65,32 @@ async function initPreciseFramePool() {
   const videoMetaCacheKey = `video_meta_${videoUrl}_${frameHeight}`
   const spriteCacheKey = `video_sprite_${videoUrl}_${frameHeight}`
 
-  // 1. 读取缓存的视频元信息
+  // 1. 从IndexedDB读取缓存的视频元信息
   let cachedMeta: CachedFullFrameData | null = null
   try {
-    const storedMeta = await localforage.getItem<CachedFullFrameData>(videoMetaCacheKey)
-    if (storedMeta) {
-      if (Date.now() - storedMeta.timestamp < 7200 * 1000) {
-        // 2小时过期
-        cachedMeta = storedMeta
-      } else {
-        await localforage.removeItem(videoMetaCacheKey)
-      }
+    const storedMeta = await videoFrameStore.getItem<CachedFullFrameData>(videoMetaCacheKey)
+    if (storedMeta && Date.now() - storedMeta.timestamp < 7200 * 1000) {
+      // 2小时过期
+      cachedMeta = storedMeta
+    } else if (storedMeta) {
+      await videoFrameStore.removeItem(videoMetaCacheKey) // 清理过期缓存
     }
   } catch (e) {
-    console.warn('读取视频元信息缓存失败:', e)
+    console.warn('读取视频元信息缓存失败：', e)
   }
 
-  // 2. 读取缓存的全量精灵图
+  // 2. 从IndexedDB读取缓存的全量精灵图
   let cachedSprite: CachedFullSpriteData | null = null
   try {
-    cachedSprite = await localforage.getItem<CachedFullSpriteData>(spriteCacheKey)
-    if (cachedSprite) {
-      if (Date.now() - cachedSprite.timestamp < 3600 * 1000) {
-        // 1小时过期
-        // 缓存已有效，不需要操作
-      } else {
-        await localforage.removeItem(spriteCacheKey)
-        cachedSprite = null
-      }
+    const storedSprite = await videoFrameStore.getItem<CachedFullSpriteData>(spriteCacheKey)
+    if (storedSprite && Date.now() - storedSprite.timestamp < 3600 * 1000) {
+      // 1小时过期
+      cachedSprite = storedSprite
+    } else if (storedSprite) {
+      await videoFrameStore.removeItem(spriteCacheKey) // 清理过期缓存
     }
   } catch (e) {
-    console.warn('读取精灵图缓存失败:', e)
+    console.warn('读取精灵图缓存失败：', e)
   }
 
   // 3. 缓存命中：直接返回
@@ -103,21 +105,14 @@ async function initPreciseFramePool() {
   // 4. 缓存未命中：提取视频帧并生成精灵图
   isLoading.value = true
   try {
-    // 先获取视频基础信息（仅1帧，拿到宽高比和时长）
     const basicVideoInfo = await getVideoFrames(videoUrl, 1)
     const { videoAspectRatio, duration } = basicVideoInfo
-
-    // 计算精准的全量帧数
     const totalFrames = calculateTotalFrames(videoAspectRatio)
-
-    // 提取全量帧（精准数量，无浪费）
     const fullVideoInfo = await getVideoFrames(videoUrl, totalFrames)
     console.log(fullVideoInfo, totalFrames)
 
-    // 生成全量精灵图（列数最多10列，避免行数过多）
+    // 生成全量精灵图
     const spriteCols = Math.min(totalFrames, 10)
-
-    // 开始计时 - 测量精灵图生成时间
     const spriteGenerateStartTime = performance.now()
     const fullSpriteInfo = await createSpriteImage(
       fullVideoInfo.frames,
@@ -125,12 +120,11 @@ async function initPreciseFramePool() {
       fullVideoInfo.frameHeight,
       spriteCols,
     )
-    // 结束计时并打印
     const spriteGenerateEndTime = performance.now()
     const spriteGenerateDuration = spriteGenerateEndTime - spriteGenerateStartTime
     console.log(`精灵图生成耗时: ${spriteGenerateDuration.toFixed(2)}ms, 帧数量: ${totalFrames}`)
 
-    // 5. 缓存视频元信息
+    // 5. 存入IndexedDB缓存（视频元信息）
     const metaData: CachedFullFrameData = {
       videoAspectRatio: fullVideoInfo.videoAspectRatio,
       frameWidth: fullVideoInfo.frameWidth,
@@ -139,17 +133,11 @@ async function initPreciseFramePool() {
       duration,
       timestamp: Date.now(),
     }
-
-    try {
-      await localforage.setItem(videoMetaCacheKey, metaData)
-    } catch (e) {
-      console.warn('存储视频元信息失败，可能是存储空间不足:', e)
-    }
-
+    await videoFrameStore.setItem(videoMetaCacheKey, metaData)
     fullFrameMeta.value = metaData
 
-    // 6. 缓存全量精灵图
-    const spriteCacheData: CachedFullSpriteData = {
+    // 6. 存入IndexedDB缓存（全量精灵图）
+    const spriteData: CachedFullSpriteData = {
       spriteInfo: fullSpriteInfo,
       videoAspectRatio: fullVideoInfo.videoAspectRatio,
       frameWidth: fullVideoInfo.frameWidth,
@@ -157,14 +145,9 @@ async function initPreciseFramePool() {
       totalFrames,
       timestamp: Date.now(),
     }
+    await videoFrameStore.setItem(spriteCacheKey, spriteData)
 
-    try {
-      await localforage.setItem(spriteCacheKey, spriteCacheData)
-    } catch (e) {
-      console.warn('存储精灵图缓存失败，可能是存储空间不足:', e)
-    }
-
-    // 清理临时Canvas，释放内存
+    // 清理临时Canvas
     fullVideoInfo.frames.forEach((frame) => {
       frame.width = 0
       frame.height = 0
@@ -183,9 +166,6 @@ async function initPreciseFramePool() {
 }
 
 /**
- * 从全量帧池中采样当前屏幕所需的帧数
- */
-/**
  * 从全量帧池中采样当前屏幕所需的帧数（完整修复版）
  */
 async function sampleFramesFromPool() {
@@ -200,70 +180,55 @@ async function sampleFramesFromPool() {
   const {
     videoAspectRatio,
     totalFrames,
-    frameWidth: originalFrameWidth, // 视频原始帧宽度（如960px）
-    frameHeight: originalFrameHeight, // 视频原始帧高度（如624px）
+    frameWidth: originalFrameWidth,
+    frameHeight: originalFrameHeight,
   } = fullFrameMeta.value
-  const containerWidth = container.clientWidth // 当前容器宽度
-  const containerHeight = frameHeight // 配置的固定高度（如80px）
+  const containerWidth = container.clientWidth
+  const containerHeight = frameHeight
 
-  // 3. 计算核心尺寸（关键：统一原始尺寸与显示尺寸的缩放比例）
-  // 容器单帧显示宽度（按宽高比计算）
+  // 3. 计算核心尺寸
   const displayFrameWidth = containerHeight * videoAspectRatio
-  // 容器单帧显示高度（固定为配置值）
   const displayFrameHeight = containerHeight
-  // 缩放比例：原始帧 → 容器显示帧（高度优先，保证比例一致）
   const scale = displayFrameHeight / originalFrameHeight
 
-  // 4. 计算当前屏幕需要的帧数（防极端值）
+  // 4. 计算当前屏幕需要的帧数
   const needFrameCount = Math.max(1, Math.ceil(containerWidth / displayFrameWidth))
-  // 实际采样帧数：不超过全量帧池总数
   const actualNeed = Math.min(needFrameCount, totalFrames)
 
-  // 5. 均匀采样索引（防越界，保证覆盖整个视频时长）
+  // 5. 均匀采样索引
   const selectedIndexes: number[] = []
   for (let i = 0; i < actualNeed; i++) {
-    // 计算0~1的均匀比例（避免最后一帧索引越界）
     const ratio = i / Math.max(1, actualNeed - 1)
-    // 采样索引：严格小于全量帧数
     const index = Math.floor(ratio * (totalFrames - 1))
     selectedIndexes.push(index)
   }
 
-  // 6. 读取精灵图缓存（带校验）
+  // 6. 从IndexedDB读取精灵图缓存
   const spriteCacheKey = `video_sprite_${videoUrl}_${frameHeight}`
   let spriteInfo: SpriteInfo | null = null
-
   try {
-    const cachedSprite = await localforage.getItem<CachedFullSpriteData>(spriteCacheKey)
-    if (!cachedSprite || Date.now() - cachedSprite.timestamp >= 3600 * 1000) {
-      if (cachedSprite) {
-        await localforage.removeItem(spriteCacheKey)
-      }
-      console.warn('精灵图缓存不存在或已过期，跳过采样')
+    const storedSprite = await videoFrameStore.getItem<CachedFullSpriteData>(spriteCacheKey)
+    if (!storedSprite) {
+      console.warn('精灵图缓存不存在，跳过采样')
       return
     }
-    spriteInfo = cachedSprite.spriteInfo
+    spriteInfo = storedSprite.spriteInfo
   } catch (e) {
-    console.error('读取或解析精灵图缓存失败：', e)
+    console.error('解析精灵图缓存失败：', e)
     return
   }
 
-  // 确保spriteInfo有效
-  if (!spriteInfo) {
-    console.warn('精灵图信息无效，跳过采样')
-    return
-  }
+  if (!spriteInfo) return
 
-  // 7. 生成帧数据（包含缩放比例，供模板使用）
+  // 7. 生成帧数据
   const framesData: FrameItem[] = []
   selectedIndexes.forEach((fullIndex, displayIndex) => {
-    // 计算帧在精灵图中的原始位置
     const position = calculateFramePosition(
       fullIndex,
       spriteInfo.cols,
       originalFrameWidth,
       originalFrameHeight,
-      totalFrames, // 传入全量帧数，防越界
+      totalFrames,
     )
 
     framesData.push({
@@ -273,11 +238,11 @@ async function sampleFramesFromPool() {
       dataThumb: position.dataThumb || '',
       displayWidth: displayFrameWidth,
       displayHeight: displayFrameHeight,
-      scale: scale, // 传递缩放比例到模板
+      scale: scale,
     })
   })
 
-  // 8. 更新响应式数据（补充缩放比例）
+  // 8. 更新响应式数据
   frameData.value = framesData
   spriteData.value = {
     url: spriteInfo.spriteUrl || '',
@@ -285,17 +250,17 @@ async function sampleFramesFromPool() {
     frameHeight: originalFrameHeight,
     cols: spriteInfo.cols,
     rows: spriteInfo.rows,
-    scale: scale, // 核心：传递缩放比例到模板
+    scale: scale,
   }
 
-  // 9. 容器样式重置（保证布局稳定）
+  // 9. 容器样式重置
   Object.assign(container.style, {
     width: '100%',
     height: `${containerHeight}px`,
     display: 'flex',
     overflowX: 'auto',
-    gap: '0', // 移除帧间隙，避免布局错位
-    scrollbarWidth: 'thin', // 美化滚动条
+    gap: '0',
+    scrollbarWidth: 'thin',
   })
 
   console.log(`采样完成：共${actualNeed}帧，缩放比例${scale.toFixed(3)}`)
