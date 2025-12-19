@@ -57,8 +57,6 @@ onUnmounted(() => {
   <div class="min-h-screen bg-gray-50 p-4">
     <!-- 加载状态提示 -->
     <div v-if="isLoading" class="mb-2 text-gray-600">加载视频帧中...</div>
-    <!-- 加载失败提示 -->
-    <div v-else-if="frameData.length === 0" class="mb-2 text-red-500">视频帧加载失败，请重试</div>
 
     <!-- 视频帧容器 -->
     <div ref="frameContainer" class="frame-container w-full overflow-x-auto flex"
