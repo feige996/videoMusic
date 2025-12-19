@@ -32,6 +32,7 @@ export interface CachedFullFrameData {
   totalFrames: number // 精准计算的全量帧数
   duration: number
   timestamp: number
+  hasAudio: boolean
 }
 
 export interface CachedFullSpriteData {

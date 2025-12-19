@@ -78,7 +78,6 @@ function cleanupAll() {
 defineExpose({
   loadVideoInfo,
   cleanupAll,
-  hasAudio: () => videoMetadata.value?.hasAudio || false,
 })
 </script>
 

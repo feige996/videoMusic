@@ -153,6 +153,7 @@ export function useVideoFrames(params: {
         totalFrames,
         duration,
         timestamp: Date.now(),
+        hasAudio: preloadedMetadata?.value?.hasAudio || false,
       }
       await videoFrameStore.setItem(videoMetaCacheKey, metaData)
       fullFrameMeta.value = metaData
