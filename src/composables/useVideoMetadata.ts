@@ -4,50 +4,58 @@ import { VIDEO_FRAME_CACHE_EXPIRE } from '@/data/config'
 import type { VideoMetadata } from '@/components/types'
 
 /**
- * 检测视频是否包含音频轨道
- * @param {HTMLVideoElement} videoEl 视频元素
+ * 检测视频是否有原声
+ * 使用AudioContext尝试加载视频URL作为音频源
+ * @param videoUrl 视频URL
  * @returns {Promise<boolean>} 是否有音频
  */
-function checkVideoHasAudio(videoEl: HTMLVideoElement): Promise<boolean> {
-  return new Promise((resolve) => {
-    // 确保视频元数据加载完成
-    const check = () => {
+async function detectVideoAudio(videoUrl: string): Promise<boolean> {
+  console.log('开始检测视频原声:', videoUrl)
+
+  // 创建临时AudioContext用于检测
+  let audioContext: AudioContext | null = null
+
+  try {
+    // 创建AudioContext实例
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
+    if (!AudioContextClass || typeof AudioContextClass !== 'function') {
+      console.warn('浏览器不支持Web Audio API')
+      return false
+    }
+
+    audioContext = new AudioContextClass()
+
+    // 尝试获取音频数据，成功则表示有原声
+    const response = await fetch(videoUrl)
+    if (!response || !response.ok) {
+      throw new Error(`HTTP错误! 状态码: ${response?.status || 'unknown'}`)
+    }
+
+    const arrayBuffer = await response.arrayBuffer()
+    if (!arrayBuffer) {
+      throw new Error('无法获取音频数据')
+    }
+
+    // 尝试解码音频数据
+    await audioContext.decodeAudioData(arrayBuffer)
+
+    // 解码成功，说明视频包含可解码的音频数据
+    return true
+  } catch (error) {
+    // 解码失败或其他错误，说明视频没有原声或原声无法解码
+    console.log('视频原声检测结果: 无原声或无法解码', error)
+    return false
+  } finally {
+    // 清理AudioContext资源
+    if (audioContext) {
       try {
-        // 类型转换为增强接口
-        const enhancedVideo = videoEl as HTMLVideoElement
-
-        // 标准 API：audioTracks（优先）
-        if (enhancedVideo.audioTracks && enhancedVideo.audioTracks.length > 0) {
-          // 过滤掉禁用的轨道（部分浏览器会默认禁用空轨道）
-          const activeAudioTracks = Array.from(enhancedVideo.audioTracks).filter(
-            (track) => track.enabled,
-          )
-          resolve(activeAudioTracks.length > 0)
-          return
-        }
-
-        // 兼容：非标准属性（兜底）
-        const hasAudio = Boolean(
-          videoEl.mozHasAudio ||
-            (videoEl.webkitAudioDecodedByteCount && videoEl.webkitAudioDecodedByteCount > 0),
-        )
-        resolve(hasAudio)
-      } catch {
-        // 异常降级（如跨域视频可能限制属性访问）
-        resolve(false)
+        audioContext.close()
+      } catch (e) {
+        console.error('关闭AudioContext失败:', e)
       }
     }
-
-    // 如果元数据已加载，直接检测；否则监听加载完成
-    if (videoEl.readyState >= 1) {
-      // HAVE_METADATA
-      check()
-    } else {
-      videoEl.addEventListener('loadedmetadata', check, { once: true })
-      // 超时兜底（防止加载失败）
-      setTimeout(() => resolve(false), 5000)
-    }
-  })
+  }
 }
 
 /**
@@ -66,7 +74,7 @@ const videoMetadataStore = localforage.createInstance({
  * @returns 视频元信息对象
  */
 export async function getVideoMetadata(videoUrl: string): Promise<VideoMetadata> {
-  return new Promise(async (resolve, reject) => {
+  return new Promise((resolve, reject) => {
     const video = document.createElement('video')
     video.crossOrigin = 'anonymous'
     video.preload = 'metadata'
@@ -74,7 +82,7 @@ export async function getVideoMetadata(videoUrl: string): Promise<VideoMetadata>
     video.onloadedmetadata = async () => {
       try {
         // 使用新的音频检测函数
-        const hasAudio = await checkVideoHasAudio(video)
+        const hasAudio = await detectVideoAudio(videoUrl)
 
         resolve({
           duration: video.duration,
