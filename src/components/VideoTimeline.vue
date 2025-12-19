@@ -21,6 +21,7 @@
         }"
       >
         <img
+          v-if="spriteData"
           :src="spriteData?.url"
           alt="视频帧"
           class="frame-img absolute"
