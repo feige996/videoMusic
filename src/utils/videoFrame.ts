@@ -112,7 +112,9 @@ export async function createSpriteImage(
 
     // 关键：生成Base64字符串（替代Blob URL）
     // 用webp格式压缩体积，质量0.8（可调整）
-    const spriteUrl = spriteCanvas.toDataURL('image/webp', 0.8)
+    // 压缩质量0.1（更小体积）,因为界面上视频帧一般尺寸都很小所以0.1也很清晰。
+    // (竖图）0.8时，需要20S ,0.1只需要5.4S，0.01时需要5.15S。（折中使用0.1)
+    const spriteUrl = spriteCanvas.toDataURL('image/webp', 0.1)
     resolve({ spriteUrl, rows, cols })
   })
 }
