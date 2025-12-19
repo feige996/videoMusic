@@ -1,7 +1,6 @@
 <script lang="ts" setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { frameHeight } from '@/data/config' // 容器高度配置
-// import longVideo from '@/assets/long.mp4' // 本地视频资源
 import { throttle } from 'lodash-es'
 import localforage from 'localforage' // 引入localforage
 import type {
@@ -10,6 +9,11 @@ import type {
   CachedFullSpriteData,
   FrameItem,
 } from '@/components/types'
+
+// 定义组件props
+const props = defineProps<{
+  videoUrl: string
+}>()
 
 import { getVideoFrames, createSpriteImage, calculateFramePosition } from '@/utils/videoFrame'
 
@@ -28,8 +32,7 @@ const videoFrameStore = localforage.createInstance({
 })
 
 // ===================== 响应式数据 =====================
-// const videoUrl = longVideo // 视频地址（可替换为远程URL）
-const videoUrl = 'https://oss.laf.run/ukw0y1-site/beautiful-girl-with-audio.mp4' // 视频地址（可替换为远程URL）
+// 视频地址从props获取
 const frameContainer = ref<HTMLElement | null>(null)
 const frameData = ref<FrameItem[]>([])
 const spriteData = ref<{
@@ -64,8 +67,8 @@ function calculateTotalFrames(videoAspectRatio: number): number {
 async function initPreciseFramePool() {
   if (fullFrameMeta.value) return fullFrameMeta.value
 
-  const videoMetaCacheKey = `video_meta_${videoUrl}_${frameHeight}`
-  const spriteCacheKey = `video_sprite_${videoUrl}_${frameHeight}`
+  const videoMetaCacheKey = `video_meta_${props.videoUrl}_${frameHeight}`
+  const spriteCacheKey = `video_sprite_${props.videoUrl}_${frameHeight}`
 
   // 1. 从IndexedDB读取缓存的视频元信息
   let cachedMeta: CachedFullFrameData | null = null
@@ -108,7 +111,7 @@ async function initPreciseFramePool() {
   isLoading.value = true
   try {
     const basicVideoInfoGenerateStartTime = performance.now()
-    const basicVideoInfo = await getVideoFrames(videoUrl, 1)
+    const basicVideoInfo = await getVideoFrames(props.videoUrl, 1)
     const basicVideoInfoGenerateEndTime = performance.now()
     const basicVideoInfoGenerateDuration =
       basicVideoInfoGenerateEndTime - basicVideoInfoGenerateStartTime
@@ -117,7 +120,7 @@ async function initPreciseFramePool() {
     const { videoAspectRatio, duration } = basicVideoInfo
     const totalFrames = calculateTotalFrames(videoAspectRatio)
     const fullVideoInfoGenerateStartTime = performance.now()
-    const fullVideoInfo = await getVideoFrames(videoUrl, totalFrames)
+    const fullVideoInfo = await getVideoFrames(props.videoUrl, totalFrames)
     const fullVideoInfoGenerateEndTime = performance.now()
     const fullVideoInfoGenerateDuration =
       fullVideoInfoGenerateEndTime - fullVideoInfoGenerateStartTime
@@ -218,7 +221,7 @@ async function sampleFramesFromPool() {
   }
 
   // 6. 从IndexedDB读取精灵图缓存
-  const spriteCacheKey = `video_sprite_${videoUrl}_${frameHeight}`
+  const spriteCacheKey = `video_sprite_${props.videoUrl}_${frameHeight}`
   let spriteInfo: SpriteInfo | null = null
   try {
     const storedSprite = await videoFrameStore.getItem<CachedFullSpriteData>(spriteCacheKey)
@@ -303,17 +306,75 @@ function handleResize() {
   }
 }
 
+// ===================== 核心方法 =====================
+/**
+ * 初始化视频帧
+ */
+async function initializeVideoFrames() {
+  if (!props.videoUrl) {
+    console.warn('videoUrl is empty, skipping initialization')
+    return
+  }
+
+  try {
+    await initPreciseFramePool() // 预生成精准帧池
+    await sampleFramesFromPool() // 采样当前屏幕所需帧数
+  } catch (error) {
+    console.error('Failed to initialize video frames:', error)
+    // 发生错误时清理资源
+    cleanupResources()
+  }
+}
+
+/**
+ * 清理所有相关资源
+ */
+function cleanupResources() {
+  // 清理帧数据
+  if (frameData.value && frameData.value.length > 0) {
+    frameData.value = []
+  }
+
+  // 清理其他响应式数据
+  fullFrameMeta.value = null
+  spriteData.value = null
+
+  // 取消所有节流操作
+  if (throttledSample && typeof throttledSample.cancel === 'function') {
+    throttledSample.cancel()
+  }
+}
+
 // ===================== 生命周期 =====================
 onMounted(async () => {
   await nextTick()
-  await initPreciseFramePool() // 首次预生成精准帧池
-  await sampleFramesFromPool() // 首次采样当前屏幕所需帧数
+  await initializeVideoFrames()
   window.addEventListener('resize', handleResize)
 })
 
+// 监听videoUrl变化，重新初始化视频帧
+watch(
+  () => props.videoUrl,
+  async (newUrl, oldUrl) => {
+    if (newUrl !== oldUrl) {
+      console.log(`Video URL changed from ${oldUrl} to ${newUrl}, reinitializing...`)
+
+      // 全面清理资源
+      cleanupResources()
+
+      // 延迟重新初始化，确保DOM更新完成
+      await nextTick()
+      await initializeVideoFrames()
+    }
+  },
+  { immediate: false },
+)
+
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
-  throttledSample.cancel() // 清理节流定时器
+
+  // 调用统一的清理函数
+  cleanupResources()
 })
 </script>
 
