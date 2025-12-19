@@ -279,7 +279,7 @@ const handleFrameImgError = (index: number) => {
 const debouncedSample = debounce(async () => {
   if (isLoading.value) return
   await sampleFramesFromPool()
-}, 200)
+}, 16)
 
 // 窗口resize处理
 function handleResize() {
