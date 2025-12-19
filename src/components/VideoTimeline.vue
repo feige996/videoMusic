@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, toRef, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import type { FrameItem } from '@/components/types'
 import { useVideoFrames } from '@/composables/useVideoFrames'
 
@@ -17,8 +17,9 @@ const spriteData = ref<{
 } | null>(null)
 const isLoading = ref(false)
 
+const videoUrlRef = toRef(props, 'videoUrl')
 const { initializeVideoFrames, cleanupResources, handleResize } = useVideoFrames({
-  videoUrl: props.videoUrl,
+  videoUrl: videoUrlRef,
   frameContainer,
   frameData,
   spriteData,

@@ -20,14 +20,14 @@ type SpriteRender = {
 }
 
 export function useVideoFrames(params: {
-  videoUrl: string
+  videoUrl: Ref<string>
   frameContainer: Ref<HTMLElement | null>
   frameData: Ref<FrameItem[]>
   spriteData: Ref<SpriteRender | null>
   isLoading: Ref<boolean>
   log?: boolean
 }) {
-  const { videoUrl, frameContainer, frameData, spriteData, isLoading } = params
+  const { videoUrl: videoUrlRef, frameContainer, frameData, spriteData, isLoading } = params
   const logEnabled = params.log === true
   const print = (message: string) => {
     if (logEnabled) console.log(message)
@@ -54,8 +54,8 @@ export function useVideoFrames(params: {
   async function initPreciseFramePool() {
     if (fullFrameMeta.value) return fullFrameMeta.value
 
-    const videoMetaCacheKey = `video_meta_${videoUrl}_${frameHeight}`
-    const spriteCacheKey = `video_sprite_${videoUrl}_${frameHeight}`
+    const videoMetaCacheKey = `video_meta_${videoUrlRef.value}_${frameHeight}`
+    const spriteCacheKey = `video_sprite_${videoUrlRef.value}_${frameHeight}`
 
     let cachedMeta: CachedFullFrameData | null = null
     try {
@@ -86,13 +86,13 @@ export function useVideoFrames(params: {
     isLoading.value = true
     try {
       const t0 = performance.now()
-      const basicVideoInfo = await getVideoFrames(videoUrl, 1)
+      const basicVideoInfo = await getVideoFrames(videoUrlRef.value, 1)
       const t1 = performance.now()
       print(`元信息耗时: ${(t1 - t0).toFixed(2)}ms`)
       const { videoAspectRatio, duration } = basicVideoInfo
       const totalFrames = calculateTotalFrames(videoAspectRatio)
       const t2 = performance.now()
-      const fullVideoInfo = await getVideoFrames(videoUrl, totalFrames)
+      const fullVideoInfo = await getVideoFrames(videoUrlRef.value, totalFrames)
       const t3 = performance.now()
       print(`抽取帧耗时: ${(t3 - t2).toFixed(2)}ms, 帧数: ${totalFrames}`)
 
@@ -166,7 +166,7 @@ export function useVideoFrames(params: {
       selectedIndexes.push(index)
     }
 
-    const spriteCacheKey = `video_sprite_${videoUrl}_${frameHeight}`
+    const spriteCacheKey = `video_sprite_${videoUrlRef.value}_${frameHeight}`
     let spriteInfo: SpriteInfo | null = null
     try {
       const storedSprite = await videoFrameStore.getItem<CachedFullSpriteData>(spriteCacheKey)
@@ -230,7 +230,7 @@ export function useVideoFrames(params: {
   }
 
   async function initializeVideoFrames() {
-    if (!videoUrl) return
+    if (!videoUrlRef.value) return
     try {
       await initPreciseFramePool()
       await sampleFramesFromPool()
