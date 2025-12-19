@@ -1,19 +1,24 @@
 /**
- * 从视频中提取指定数量的帧
- * @param videoUrl 视频URL
- * @param frameCount 需要提取的帧数
- * @returns 视频帧信息+帧Canvas数组
+ * 视频帧提取结果类型
  */
-export async function getVideoFrames(
-  videoUrl: string,
-  frameCount: number,
-): Promise<{
+export interface VideoFramesResult {
   frames: HTMLCanvasElement[]
   videoAspectRatio: number
   frameWidth: number
   frameHeight: number
   duration: number
-}> {
+}
+
+/**
+ * 从视频中提取指定数量的帧（串行版本 - 旧版）
+ * @param videoUrl 视频URL
+ * @param frameCount 需要提取的帧数
+ * @returns 视频帧信息+帧Canvas数组
+ */
+export async function getVideoFramesSerial(
+  videoUrl: string,
+  frameCount: number,
+): Promise<VideoFramesResult> {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video')
     // 解决跨域问题（根据实际场景调整）
@@ -78,6 +83,164 @@ export async function getVideoFrames(
     video.src = videoUrl
   })
 }
+
+/**
+ * 从视频中提取指定数量的帧（并发版本 - 优化版）
+ * @param videoUrl 视频URL
+ * @param frameCount 需要提取的帧数
+ * @param concurrency 并发数，默认为6
+ * @returns 视频帧信息+帧Canvas数组
+ */
+export async function getVideoFramesConcurrent(
+  videoUrl: string,
+  frameCount: number,
+  concurrency: number = 6,
+): Promise<VideoFramesResult> {
+  // 1. 获取视频元信息（复用一个video实例）
+  const metaVideo = document.createElement('video')
+  metaVideo.crossOrigin = 'anonymous'
+  metaVideo.preload = 'metadata'
+  metaVideo.muted = true
+  metaVideo.playsInline = true
+
+  await new Promise((resolve, reject) => {
+    metaVideo.onloadedmetadata = resolve
+    metaVideo.onerror = () => reject(new Error('视频元信息加载失败'))
+    metaVideo.src = videoUrl
+  })
+
+  const duration = metaVideo.duration
+  const videoWidth = metaVideo.videoWidth
+  const videoHeight = metaVideo.videoHeight
+  const videoAspectRatio = videoWidth / videoHeight
+
+  // 释放元信息video
+  metaVideo.removeAttribute('src')
+  metaVideo.load()
+
+  // 2. 创建并发池
+  const poolInitStart = performance.now()
+  const poolSize = Math.min(concurrency, frameCount)
+  const videoPool: HTMLVideoElement[] = []
+
+  for (let i = 0; i < poolSize; i++) {
+    const v = document.createElement('video')
+    v.crossOrigin = 'anonymous'
+    v.muted = true
+    v.playsInline = true
+    v.preload = 'auto' // 显式设置 preload
+    v.src = videoUrl
+    // 显式加载并等待就绪
+    // v.load() // src赋值会自动load，但我们可以监听事件确保
+    videoPool.push(v)
+  }
+
+  // 等待所有video准备就绪，避免并发seek时卡住
+  await Promise.all(
+    videoPool.map(
+      (v) =>
+        new Promise((resolve) => {
+          // 如果已经是 readyState >= 1 (HAVE_METADATA)，直接 resolve
+          if (v.readyState >= 1) {
+            resolve(null)
+            return
+          }
+          v.onloadedmetadata = () => resolve(null)
+          // 增加超时防止永久挂起
+          setTimeout(() => resolve(null), 2000)
+        }),
+    ),
+  )
+  console.log(`并发池初始化耗时: ${(performance.now() - poolInitStart).toFixed(2)}ms`)
+
+  // 3. 准备任务列表
+  const tasks = Array.from({ length: frameCount }, (_, i) => ({
+    index: i,
+    time: (i / frameCount) * duration,
+  }))
+
+  const frames = new Array<HTMLCanvasElement>(frameCount)
+  let taskIndex = 0
+
+  // 4. 定义Worker函数
+  const worker = async (video: HTMLVideoElement) => {
+    while (taskIndex < tasks.length) {
+      // 领取任务（原子操作模拟）
+      const currentTaskIndex = taskIndex++
+      if (currentTaskIndex >= tasks.length) break
+      const task = tasks[currentTaskIndex]
+      if (!task) break
+
+      try {
+        video.currentTime = task.time
+        await new Promise((resolve, reject) => {
+          let resolved = false
+          const onSeeked = () => {
+            if (resolved) return
+            resolved = true
+            video.removeEventListener('seeked', onSeeked)
+            video.removeEventListener('error', onError)
+            resolve(null)
+          }
+          const onError = () => {
+            if (resolved) return
+            resolved = true
+            video.removeEventListener('seeked', onSeeked)
+            video.removeEventListener('error', onError)
+            reject(new Error(`Seek failed at ${task.time}`))
+          }
+          video.addEventListener('seeked', onSeeked)
+          video.addEventListener('error', onError)
+
+          // 增加seek超时保护
+          setTimeout(() => {
+            if (!resolved) {
+              resolved = true
+              video.removeEventListener('seeked', onSeeked)
+              video.removeEventListener('error', onError)
+              // 超时视为失败，或者 resolve null 跳过
+              console.warn(`Seek timeout at ${task.time}`)
+              resolve(null) // 这里选择 resolve 以继续执行下一个任务，避免死锁
+            }
+          }, 3000)
+        })
+
+        const canvas = document.createElement('canvas')
+        canvas.width = videoWidth
+        canvas.height = videoHeight
+        const ctx = canvas.getContext('2d')
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, videoWidth, videoHeight)
+          frames[task.index] = canvas
+        }
+      } catch (e) {
+        console.warn(`Frame ${task.index} extraction failed:`, e)
+        // 失败补空帧或重试逻辑可在此添加
+      }
+    }
+  }
+
+  // 5. 启动并发
+  await Promise.all(videoPool.map((v) => worker(v)))
+
+  // 6. 清理资源
+  videoPool.forEach((v) => {
+    v.removeAttribute('src')
+    v.load()
+  })
+
+  return {
+    frames,
+    videoAspectRatio,
+    frameWidth: videoWidth,
+    frameHeight: videoHeight,
+    duration,
+  }
+}
+
+// 默认导出优化后的并发版本
+export const getVideoFrames = getVideoFramesConcurrent
+
 // src/utils/videoFrame.ts
 export async function createSpriteImage(
   frames: HTMLCanvasElement[],
@@ -105,6 +268,7 @@ export async function createSpriteImage(
 
     // 绘制所有帧到精灵图
     frames.forEach((frame, index) => {
+      if (!frame) return // 容错：跳过空帧
       const row = Math.floor(index / cols)
       const col = index % cols
       ctx.drawImage(frame, col * frameWidth, row * frameHeight)

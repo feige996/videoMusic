@@ -27,6 +27,7 @@ const spriteData = ref<{
 const preloadedMetadataRef = toRef(props, 'preloadedMetadata')
 const videoUrlRef = toRef(props, 'videoUrl')
 const isLoading = ref(false)
+const useConcurrent = ref(true)
 
 const { initializeVideoFrames, cleanupResources } = useVideoFrames({
   videoUrl: videoUrlRef,
@@ -36,6 +37,7 @@ const { initializeVideoFrames, cleanupResources } = useVideoFrames({
   isLoading,
   log: true,
   preloadedMetadata: preloadedMetadataRef,
+  useConcurrent,
 })
 
 const handleFrameImgError = (index: number) => {
@@ -55,6 +57,14 @@ const initializeWithMetadata = async () => {
 // 监听isLoading变化并通知父组件
 watch(isLoading, (newValue) => {
   emit('update:isLoading', newValue)
+})
+
+watch(useConcurrent, async () => {
+  cleanupResources()
+  if (videoUrlRef.value) {
+    isLoading.value = true
+    await initializeWithMetadata()
+  }
 })
 
 watch(
@@ -77,6 +87,18 @@ watch(
 
 <template>
   <div class="timeline-wrapper">
+    <!-- 性能对比控制 -->
+    <div class="mb-2 px-1">
+      <label class="inline-flex items-center cursor-pointer select-none">
+        <input
+          type="checkbox"
+          v-model="useConcurrent"
+          class="form-checkbox rounded text-blue-600 focus:ring-blue-500 h-4 w-4 transition duration-150 ease-in-out"
+        />
+        <span class="ml-2 text-sm text-gray-700 font-medium">启用并发提取优化 (Check Console for Timing)</span>
+      </label>
+    </div>
+
     <!-- 视频帧容器 -->
     <div
       ref="frameContainer"

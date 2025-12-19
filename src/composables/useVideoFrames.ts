@@ -9,7 +9,13 @@ import type {
   FrameItem,
 } from '@/components/types'
 import type { VideoMetadata } from '@/components/types'
-import { getVideoFrames, createSpriteImage, calculateFramePosition } from '@/utils/videoFrame'
+import {
+  getVideoFrames,
+  getVideoFramesSerial,
+  getVideoFramesConcurrent,
+  createSpriteImage,
+  calculateFramePosition,
+} from '@/utils/videoFrame'
 import { setItemWithQuotaHandling } from '@/utils/storageHelper'
 
 type SpriteRender = {
@@ -29,6 +35,7 @@ export function useVideoFrames(params: {
   isLoading: Ref<boolean>
   log?: boolean
   preloadedMetadata?: Ref<VideoMetadata | null | undefined>
+  useConcurrent?: Ref<boolean>
 }) {
   const {
     videoUrl: videoUrlRef,
@@ -37,6 +44,7 @@ export function useVideoFrames(params: {
     spriteData,
     isLoading,
     preloadedMetadata,
+    useConcurrent,
   } = params
   const logEnabled = params.log === true
   const print = (message: string) => {
@@ -64,8 +72,10 @@ export function useVideoFrames(params: {
   async function initPreciseFramePool() {
     if (fullFrameMeta.value) return fullFrameMeta.value
 
-    const videoMetaCacheKey = `video_meta_${videoUrlRef.value}_${frameHeight}`
-    const spriteCacheKey = `video_sprite_${videoUrlRef.value}_${frameHeight}`
+    const isConcurrent = useConcurrent?.value ?? true
+    const modeSuffix = isConcurrent ? 'concurrent' : 'serial'
+    const videoMetaCacheKey = `video_meta_${videoUrlRef.value}_${frameHeight}_${modeSuffix}`
+    const spriteCacheKey = `video_sprite_${videoUrlRef.value}_${frameHeight}_${modeSuffix}`
 
     let cachedMeta: CachedFullFrameData | null = null
     try {
@@ -75,7 +85,7 @@ export function useVideoFrames(params: {
       } else if (storedMeta) {
         await videoFrameStore.removeItem(videoMetaCacheKey)
       }
-    } catch {}
+    } catch { }
 
     let cachedSprite: CachedFullSpriteData | null = null
     try {
@@ -85,7 +95,7 @@ export function useVideoFrames(params: {
       } else if (storedSprite) {
         await videoFrameStore.removeItem(spriteCacheKey)
       }
-    } catch {}
+    } catch { }
 
     if (cachedMeta && cachedSprite) {
       print('缓存命中')
@@ -98,6 +108,8 @@ export function useVideoFrames(params: {
     isLoading.value = true
     try {
       const t0 = performance.now()
+      const getVideoFramesFn = isConcurrent ? getVideoFramesConcurrent : getVideoFramesSerial
+      const modeName = isConcurrent ? '并发模式' : '串行模式'
 
       // 检查是否有预加载的元信息
       let videoAspectRatio: number
@@ -121,7 +133,7 @@ export function useVideoFrames(params: {
       } else {
         print('自己获取元信息')
         // 没有预加载元信息时，获取基本视频信息
-        const basicVideoInfo = await getVideoFrames(videoUrlRef.value, 1)
+        const basicVideoInfo = await getVideoFramesFn(videoUrlRef.value, 1)
         videoAspectRatio = basicVideoInfo.videoAspectRatio
         duration = basicVideoInfo.duration
         frameWidth = basicVideoInfo.frameWidth
@@ -132,7 +144,8 @@ export function useVideoFrames(params: {
       print(`元信息耗时: ${(t1 - t0).toFixed(2)}ms`)
       const totalFrames = calculateTotalFrames(videoAspectRatio)
       const t2 = performance.now()
-      const fullVideoInfo = await getVideoFrames(videoUrlRef.value, totalFrames)
+      print(`开始提取帧 [${modeName}]...`)
+      const fullVideoInfo = await getVideoFramesFn(videoUrlRef.value, totalFrames)
       const t3 = performance.now()
       print(`抽取帧耗时: ${(t3 - t2).toFixed(2)}ms, 帧数: ${totalFrames}`)
 
@@ -208,7 +221,9 @@ export function useVideoFrames(params: {
       selectedIndexes.push(index)
     }
 
-    const spriteCacheKey = `video_sprite_${videoUrlRef.value}_${frameHeight}`
+    const isConcurrent = useConcurrent?.value ?? true
+    const modeSuffix = isConcurrent ? 'concurrent' : 'serial'
+    const spriteCacheKey = `video_sprite_${videoUrlRef.value}_${frameHeight}_${modeSuffix}`
     let spriteInfo: SpriteInfo | null = null
     try {
       const storedSprite = await videoFrameStore.getItem<CachedFullSpriteData>(spriteCacheKey)
@@ -289,7 +304,7 @@ export function useVideoFrames(params: {
     spriteData.value = null
     type HasCancel = { cancel: () => void }
     if (throttledSample && typeof (throttledSample as HasCancel).cancel === 'function') {
-      ;(throttledSample as HasCancel).cancel()
+      ; (throttledSample as HasCancel).cancel()
     }
   }
 
