@@ -78,32 +78,22 @@ export async function getVideoFrames(
     video.src = videoUrl
   })
 }
-
-/**
- * 生成精灵图（将多个Canvas帧合并为一张图片）
- * @param frames 帧Canvas数组
- * @param frameWidth 单帧宽度
- * @param frameHeight 单帧高度
- * @param cols 精灵图列数
- * @returns 精灵图URL+行列数
- */
+// src/utils/videoFrame.ts
 export async function createSpriteImage(
   frames: HTMLCanvasElement[],
   frameWidth: number,
   frameHeight: number,
   cols: number,
 ): Promise<{
-  spriteUrl: string
+  spriteUrl: string // 改为Base64字符串
   rows: number
   cols: number
 }> {
   return new Promise((resolve) => {
-    // 计算精灵图行列数
     const rows = Math.ceil(frames.length / cols)
     const spriteWidth = cols * frameWidth
     const spriteHeight = rows * frameHeight
 
-    // 创建精灵图Canvas
     const spriteCanvas = document.createElement('canvas')
     spriteCanvas.width = spriteWidth
     spriteCanvas.height = spriteHeight
@@ -120,21 +110,10 @@ export async function createSpriteImage(
       ctx.drawImage(frame, col * frameWidth, row * frameHeight)
     })
 
-    // 将Canvas转为Base64 URL（支持webp格式，压缩体积）
-    spriteCanvas.toBlob(
-      (blob) => {
-        if (!blob) {
-          // 降级为png格式
-          const spriteUrl = spriteCanvas.toDataURL('image/png')
-          resolve({ spriteUrl, rows, cols })
-          return
-        }
-        const spriteUrl = URL.createObjectURL(blob)
-        resolve({ spriteUrl, rows, cols })
-      },
-      'image/webp',
-      0.8, // 压缩质量（0-1）
-    )
+    // 关键：生成Base64字符串（替代Blob URL）
+    // 用webp格式压缩体积，质量0.8（可调整）
+    const spriteUrl = spriteCanvas.toDataURL('image/webp', 0.8)
+    resolve({ spriteUrl, rows, cols })
   })
 }
 
