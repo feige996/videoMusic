@@ -14,7 +14,7 @@
       <div
         v-for="frame in frameData"
         :key="frame.index"
-        class="frame-item relative shrink-0"
+        class="frame-item relative shrink-0 overflow-hidden bg-gray-100"
         :style="{
           width: `${frame.displayWidth}px`,
           height: `${frame.displayHeight}px`,
@@ -23,14 +23,23 @@
         <img
           :src="spriteData?.url"
           alt="视频帧"
-          class="frame-img absolute inset-0 w-auto h-full transform"
+          class="frame-img absolute"
           :style="{
-            transform: `translateX(-${frame.col * spriteData?.frameWidth || 0}px) translateY(-${frame.row * spriteData?.frameHeight || 0}px)`,
-            clipPath: `rect(0 ${spriteData?.frameWidth}px ${spriteData?.frameHeight}px 0)`,
+            width: `${spriteData?.cols * spriteData?.frameWidth * spriteData?.scale || 0}px`,
+            height: `${spriteData?.rows * spriteData?.frameHeight * spriteData?.scale || 0}px`,
+            transform: `translateX(-${frame.col * (spriteData?.frameWidth || 0) * spriteData?.scale || 0}px) translateY(-${frame.row * (spriteData?.frameHeight || 0) * spriteData?.scale || 0}px)`,
+            display: spriteData?.url ? 'block' : 'none',
           }"
           loading="lazy"
           @error="handleFrameImgError(frame.index)"
         />
+        <!-- 兜底提示 -->
+        <div
+          v-if="!spriteData?.url"
+          class="absolute inset-0 flex items-center justify-center text-gray-400 text-xs"
+        >
+          帧{{ frame.index }}加载失败
+        </div>
       </div>
     </div>
   </div>
@@ -89,6 +98,7 @@ interface FrameItem {
   dataThumb: string
   displayWidth: number
   displayHeight: number
+  scale: number // 新增：传递缩放比例到模板
 }
 
 // ===================== 响应式数据 =====================
@@ -101,6 +111,7 @@ const spriteData = ref<{
   frameHeight: number
   cols: number
   rows: number
+  scale: number // 新增：传递缩放比例到模板
 } | null>(null)
 const isLoading = ref(false)
 // 内存缓存全量帧元信息（避免重复计算）
@@ -175,6 +186,7 @@ async function initPreciseFramePool() {
 
     // 提取全量帧（精准数量，无浪费）
     const fullVideoInfo = await getVideoFrames(videoUrl, totalFrames)
+    console.log(fullVideoInfo, totalFrames)
 
     // 生成全量精灵图（列数最多10列，避免行数过多）
     const spriteCols = Math.min(totalFrames, 10)
@@ -229,68 +241,112 @@ async function initPreciseFramePool() {
 /**
  * 从全量帧池中采样当前屏幕所需的帧数
  */
+/**
+ * 从全量帧池中采样当前屏幕所需的帧数（完整修复版）
+ */
 async function sampleFramesFromPool() {
+  // 1. 基础校验
   const container = frameContainer.value
-  if (!container || !fullFrameMeta.value) return
+  if (!container || !fullFrameMeta.value) {
+    console.warn('容器或全量帧元信息为空，跳过采样')
+    return
+  }
 
-  const { videoAspectRatio, totalFrames } = fullFrameMeta.value
-  const containerWidth = container.clientWidth
-  const containerHeight = frameHeight
+  // 2. 解构基础参数
+  const {
+    videoAspectRatio,
+    totalFrames,
+    frameWidth: originalFrameWidth, // 视频原始帧宽度（如960px）
+    frameHeight: originalFrameHeight, // 视频原始帧高度（如624px）
+  } = fullFrameMeta.value
+  const containerWidth = container.clientWidth // 当前容器宽度
+  const containerHeight = frameHeight // 配置的固定高度（如80px）
 
-  // 计算当前屏幕需要的帧数
-  const singleFrameWidth = containerHeight * videoAspectRatio
-  const needFrameCount = Math.max(1, Math.ceil(containerWidth / singleFrameWidth))
+  // 3. 计算核心尺寸（关键：统一原始尺寸与显示尺寸的缩放比例）
+  // 容器单帧显示宽度（按宽高比计算）
+  const displayFrameWidth = containerHeight * videoAspectRatio
+  // 容器单帧显示高度（固定为配置值）
+  const displayFrameHeight = containerHeight
+  // 缩放比例：原始帧 → 容器显示帧（高度优先，保证比例一致）
+  const scale = displayFrameHeight / originalFrameHeight
 
-  // 从全量帧池中均匀采样（不超过全量帧数）
-  const selectedIndexes: number[] = []
+  // 4. 计算当前屏幕需要的帧数（防极端值）
+  const needFrameCount = Math.max(1, Math.ceil(containerWidth / displayFrameWidth))
+  // 实际采样帧数：不超过全量帧池总数
   const actualNeed = Math.min(needFrameCount, totalFrames)
+
+  // 5. 均匀采样索引（防越界，保证覆盖整个视频时长）
+  const selectedIndexes: number[] = []
   for (let i = 0; i < actualNeed; i++) {
+    // 计算0~1的均匀比例（避免最后一帧索引越界）
     const ratio = i / Math.max(1, actualNeed - 1)
-    const index = Math.min(totalFrames - 1, Math.floor(ratio * totalFrames))
+    // 采样索引：严格小于全量帧数
+    const index = Math.floor(ratio * (totalFrames - 1))
     selectedIndexes.push(index)
   }
 
-  // 读取全量精灵图缓存
+  // 6. 读取精灵图缓存（带校验）
   const spriteCacheKey = `video_sprite_${videoUrl}_${frameHeight}`
   const storedSprite = sessionStorage.getItem(spriteCacheKey)
-  if (!storedSprite) return
+  if (!storedSprite) {
+    console.warn('精灵图缓存不存在，跳过采样')
+    return
+  }
 
-  const { spriteInfo } = JSON.parse(storedSprite) as CachedFullSpriteData
+  let spriteInfo: SpriteInfo
+  try {
+    const parsed = JSON.parse(storedSprite) as CachedFullSpriteData
+    spriteInfo = parsed.spriteInfo
+  } catch (e) {
+    console.error('解析精灵图缓存失败：', e)
+    return
+  }
 
-  // 生成当前帧的位置数据
+  // 7. 生成帧数据（包含缩放比例，供模板使用）
   const framesData: FrameItem[] = []
   selectedIndexes.forEach((fullIndex, displayIndex) => {
+    // 计算帧在精灵图中的原始位置
     const position = calculateFramePosition(
       fullIndex,
       spriteInfo.cols,
-      fullFrameMeta.value!.frameWidth,
-      fullFrameMeta.value!.frameHeight,
+      originalFrameWidth,
+      originalFrameHeight,
+      totalFrames, // 传入全量帧数，防越界
     )
+
     framesData.push({
       index: displayIndex,
       row: position.row,
       col: position.col,
       dataThumb: position.dataThumb || '',
-      displayWidth: singleFrameWidth,
-      displayHeight: containerHeight,
+      displayWidth: displayFrameWidth,
+      displayHeight: displayFrameHeight,
+      scale: scale, // 传递缩放比例到模板
     })
   })
 
-  // 更新响应式数据
+  // 8. 更新响应式数据（补充缩放比例）
   frameData.value = framesData
   spriteData.value = {
     url: spriteInfo.spriteUrl || '',
-    frameWidth: fullFrameMeta.value.frameWidth,
-    frameHeight: fullFrameMeta.value.frameHeight,
+    frameWidth: originalFrameWidth,
+    frameHeight: originalFrameHeight,
     cols: spriteInfo.cols,
     rows: spriteInfo.rows,
+    scale: scale, // 核心：传递缩放比例到模板
   }
 
-  // 容器样式
-  container.style.width = '100%'
-  container.style.height = `${containerHeight}px`
-  container.style.display = 'flex'
-  container.style.overflowX = 'auto'
+  // 9. 容器样式重置（保证布局稳定）
+  Object.assign(container.style, {
+    width: '100%',
+    height: `${containerHeight}px`,
+    display: 'flex',
+    overflowX: 'auto',
+    gap: '0', // 移除帧间隙，避免布局错位
+    scrollbarWidth: 'thin', // 美化滚动条
+  })
+
+  console.log(`采样完成：共${actualNeed}帧，缩放比例${scale.toFixed(3)}`)
 }
 
 /**

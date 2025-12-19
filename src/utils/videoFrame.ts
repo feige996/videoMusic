@@ -139,28 +139,46 @@ export async function createSpriteImage(
 }
 
 /**
- * 计算指定索引的帧在精灵图中的位置
- * @param index 帧索引
- * @param cols 精灵图列数
- * @param frameWidth 单帧宽度
- * @param frameHeight 单帧高度
- * @returns 帧的行列位置+标识
+ * 计算指定索引的帧在精灵图中的位置（完整修复版）
+ * @param index 帧在全量帧池中的索引
+ * @param cols 精灵图的列数
+ * @param frameWidth 单帧原始宽度
+ * @param frameHeight 单帧原始高度
+ * @param totalFrames 全量帧池总数（可选，用于防越界）
+ * @returns 帧的行列位置+唯一标识
  */
 export function calculateFramePosition(
   index: number,
   cols: number,
   frameWidth: number,
   frameHeight: number,
+  totalFrames?: number,
 ): {
   row: number
   col: number
   dataThumb: string
 } {
-  const row = Math.floor(index / cols)
-  const col = index % cols
+  // 1. 基础参数校验（避免NaN/负数）
+  if (isNaN(index) || index < 0) index = 0
+  if (isNaN(cols) || cols < 1) cols = 1
+  if (isNaN(frameWidth) || frameWidth < 1) frameWidth = 1
+  if (isNaN(frameHeight) || frameHeight < 1) frameHeight = 1
+
+  // 2. 索引防越界（关键：避免超过全量帧数）
+  if (totalFrames && !isNaN(totalFrames) && totalFrames > 0) {
+    index = Math.min(index, totalFrames - 1)
+  }
+
+  // 3. 核心计算：行列位置
+  const row = Math.floor(index / cols) // 行 = 索引 / 列数（向下取整）
+  const col = index % cols // 列 = 索引 % 列数（取余）
+
+  // 4. 生成唯一标识（便于调试/定位问题）
+  const dataThumb = `frame_${index}_row${row}_col${col}_${frameWidth}x${frameHeight}`
+
   return {
     row,
     col,
-    dataThumb: `frame_${index}_${row}_${col}`,
+    dataThumb,
   }
 }
