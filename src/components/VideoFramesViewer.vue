@@ -24,23 +24,10 @@ const spriteData = ref<{
   scale: number
 } | null>(null)
 // 响应式引用
-const preloadedMetadataRef = ref(props.preloadedMetadata)
+const preloadedMetadataRef = toRef(props, 'preloadedMetadata')
+const videoUrlRef = toRef(props, 'videoUrl')
 const isLoading = ref(false)
 
-// 监听props中的preloadedMetadata变化
-watch(
-  () => props.preloadedMetadata,
-  (newMetadata) => {
-    preloadedMetadataRef.value = newMetadata
-  },
-)
-
-// 监听isLoading变化并通知父组件
-watch(isLoading, (newValue) => {
-  emit('update:isLoading', newValue)
-})
-
-const videoUrlRef = toRef(props, 'videoUrl')
 const { initializeVideoFrames, cleanupResources } = useVideoFrames({
   videoUrl: videoUrlRef,
   frameContainer,
@@ -64,6 +51,11 @@ const initializeWithMetadata = async () => {
     await initializeVideoFrames()
   }
 }
+
+// 监听isLoading变化并通知父组件
+watch(isLoading, (newValue) => {
+  emit('update:isLoading', newValue)
+})
 
 watch(
   videoUrlRef,
