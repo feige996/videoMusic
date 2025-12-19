@@ -1,4 +1,16 @@
 // ===================== 类型定义 =====================
+
+/**
+ * 视频元数据接口
+ */
+export interface VideoMetadata {
+  duration: number // 视频时长（秒）
+  width: number // 视频宽度
+  height: number // 视频高度
+  aspectRatio: number // 宽高比
+  hasAudio: boolean // 是否包含音频轨道
+  frameRate: number // 视频帧率
+}
 export interface VideoFramesInfo {
   frames: HTMLCanvasElement[]
   videoAspectRatio: number

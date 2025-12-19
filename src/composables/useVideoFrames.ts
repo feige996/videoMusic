@@ -8,6 +8,7 @@ import type {
   CachedFullSpriteData,
   FrameItem,
 } from '@/components/types'
+import type { VideoMetadata } from '@/components/types'
 import { getVideoFrames, createSpriteImage, calculateFramePosition } from '@/utils/videoFrame'
 
 type SpriteRender = {
@@ -26,8 +27,16 @@ export function useVideoFrames(params: {
   spriteData: Ref<SpriteRender | null>
   isLoading: Ref<boolean>
   log?: boolean
+  preloadedMetadata?: Ref<VideoMetadata | null | undefined>
 }) {
-  const { videoUrl: videoUrlRef, frameContainer, frameData, spriteData, isLoading } = params
+  const {
+    videoUrl: videoUrlRef,
+    frameContainer,
+    frameData,
+    spriteData,
+    isLoading,
+    preloadedMetadata,
+  } = params
   const logEnabled = params.log === true
   const print = (message: string) => {
     if (logEnabled) console.log(message)
@@ -65,7 +74,7 @@ export function useVideoFrames(params: {
       } else if (storedMeta) {
         await videoFrameStore.removeItem(videoMetaCacheKey)
       }
-    } catch { }
+    } catch {}
 
     let cachedSprite: CachedFullSpriteData | null = null
     try {
@@ -75,7 +84,7 @@ export function useVideoFrames(params: {
       } else if (storedSprite) {
         await videoFrameStore.removeItem(spriteCacheKey)
       }
-    } catch { }
+    } catch {}
 
     if (cachedMeta && cachedSprite) {
       print('缓存命中')
@@ -86,10 +95,37 @@ export function useVideoFrames(params: {
     isLoading.value = true
     try {
       const t0 = performance.now()
-      const basicVideoInfo = await getVideoFrames(videoUrlRef.value, 1)
+
+      // 检查是否有预加载的元信息
+      let videoAspectRatio: number
+      let duration: number
+      let frameWidth: number
+      let frameHeight: number
+
+      if (preloadedMetadata?.value) {
+        // 使用预加载的元信息
+        const {
+          aspectRatio,
+          duration: videoDuration,
+          width: vWidth,
+          height: vHeight,
+        } = preloadedMetadata.value
+        videoAspectRatio = aspectRatio
+        duration = videoDuration
+        frameWidth = vWidth
+        frameHeight = vHeight
+        print('使用预加载元信息')
+      } else {
+        // 没有预加载元信息时，获取基本视频信息
+        const basicVideoInfo = await getVideoFrames(videoUrlRef.value, 1)
+        videoAspectRatio = basicVideoInfo.videoAspectRatio
+        duration = basicVideoInfo.duration
+        frameWidth = basicVideoInfo.frameWidth
+        frameHeight = basicVideoInfo.frameHeight
+      }
+
       const t1 = performance.now()
       print(`元信息耗时: ${(t1 - t0).toFixed(2)}ms`)
-      const { videoAspectRatio, duration } = basicVideoInfo
       const totalFrames = calculateTotalFrames(videoAspectRatio)
       const t2 = performance.now()
       const fullVideoInfo = await getVideoFrames(videoUrlRef.value, totalFrames)
@@ -247,7 +283,7 @@ export function useVideoFrames(params: {
     spriteData.value = null
     type HasCancel = { cancel: () => void }
     if (throttledSample && typeof (throttledSample as HasCancel).cancel === 'function') {
-      ; (throttledSample as HasCancel).cancel()
+      ;(throttledSample as HasCancel).cancel()
     }
   }
 

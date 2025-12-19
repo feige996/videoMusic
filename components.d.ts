@@ -12,19 +12,19 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
-    ElButton: typeof import('element-plus/es')['ElButton']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     TestDemo: typeof import('./src/components/TestDemo.vue')['default']
+    VideoPlayer: typeof import('./src/components/VideoPlayer.vue')['default']
     VideoTimeline: typeof import('./src/components/VideoTimeline.vue')['default']
   }
 }
 
 // For TSX support
 declare global {
-  const ElButton: typeof import('element-plus/es')['ElButton']
   const RouterLink: typeof import('vue-router')['RouterLink']
   const RouterView: typeof import('vue-router')['RouterView']
   const TestDemo: typeof import('./src/components/TestDemo.vue')['default']
+  const VideoPlayer: typeof import('./src/components/VideoPlayer.vue')['default']
   const VideoTimeline: typeof import('./src/components/VideoTimeline.vue')['default']
 }

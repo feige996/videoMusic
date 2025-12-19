@@ -1,9 +1,17 @@
 <script lang="ts" setup>
-import { ref, toRef, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, toRef, onMounted, onUnmounted, nextTick, watch, watchEffect } from 'vue'
 import type { FrameItem } from '@/components/types'
+import type { VideoMetadata } from '@/components/types'
 import { useVideoFrames } from '@/composables/useVideoFrames'
 
-const props = defineProps<{ videoUrl: string }>()
+const props = defineProps<{
+  videoUrl: string
+  preloadedMetadata?: VideoMetadata | null
+}>()
+
+const emit = defineEmits<{
+  'update:isLoading': [boolean]
+}>()
 
 const frameContainer = ref<HTMLElement | null>(null)
 const frameData = ref<FrameItem[]>([])
@@ -15,7 +23,22 @@ const spriteData = ref<{
   rows: number
   scale: number
 } | null>(null)
+// 响应式引用
+const preloadedMetadataRef = ref(props.preloadedMetadata)
 const isLoading = ref(false)
+
+// 监听props中的preloadedMetadata变化
+watch(
+  () => props.preloadedMetadata,
+  (newMetadata) => {
+    preloadedMetadataRef.value = newMetadata
+  },
+)
+
+// 监听isLoading变化并通知父组件
+watch(isLoading, (newValue) => {
+  emit('update:isLoading', newValue)
+})
 
 const videoUrlRef = toRef(props, 'videoUrl')
 const { initializeVideoFrames, cleanupResources, handleResize } = useVideoFrames({
@@ -25,16 +48,36 @@ const { initializeVideoFrames, cleanupResources, handleResize } = useVideoFrames
   spriteData,
   isLoading,
   log: true,
+  preloadedMetadata: preloadedMetadataRef,
 })
 
 const handleFrameImgError = (index: number) => {
   console.error(`视频帧${index}加载失败`)
 }
 
-onMounted(async () => {
+// 当初始化或元信息更新时，重新初始化视频帧
+const initializeWithMetadata = async () => {
+  // 等待nextTick确保DOM更新
   await nextTick()
-  await initializeVideoFrames()
+  // 只有在有视频URL时才初始化
+  if (videoUrlRef.value) {
+    await initializeVideoFrames()
+  }
+}
+
+onMounted(async () => {
+  await initializeWithMetadata()
   window.addEventListener('resize', handleResize)
+})
+
+// 当预加载的元信息可用时，初始化视频帧
+watchEffect(async () => {
+  if (preloadedMetadataRef.value && videoUrlRef.value) {
+    // 确保容器已经渲染
+    if (frameContainer.value) {
+      await initializeWithMetadata()
+    }
+  }
 })
 
 watch(
@@ -42,8 +85,10 @@ watch(
   async (newUrl, oldUrl) => {
     if (newUrl !== oldUrl) {
       cleanupResources()
+      // 重置预加载元信息引用
+      preloadedMetadataRef.value = props.preloadedMetadata
+      // 等待元信息更新后再初始化
       await nextTick()
-      await initializeVideoFrames()
     }
   },
   { immediate: false },
@@ -56,26 +101,41 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 p-4">
-    <!-- 加载状态提示 -->
-    <div v-if="isLoading" class="mb-2 text-gray-600">加载视频帧中...</div>
-
+  <div class="timeline-wrapper">
     <!-- 视频帧容器 -->
-    <div ref="frameContainer" class="frame-container w-full overflow-x-auto flex"
-      :class="{ 'opacity-50 cursor-wait': isLoading }">
-      <div v-for="frame in frameData" :key="frame.index"
-        class="frame-item relative shrink-0 overflow-hidden bg-gray-100" :style="{
+    <div
+      ref="frameContainer"
+      class="w-full overflow-x-auto flex transition-opacity duration-200"
+      :class="{ 'opacity-50 cursor-wait': isLoading }"
+    >
+      <div
+        v-for="frame in frameData"
+        :key="frame.index"
+        class="relative shrink-0 overflow-hidden bg-gray-100 hover:opacity-90 transition-opacity duration-200"
+        :style="{
           width: `${frame.displayWidth}px`,
           height: `${frame.displayHeight}px`,
-        }">
-        <img v-if="spriteData" :src="spriteData?.url" alt="视频帧" class="frame-img absolute" :style="{
-          width: `${spriteData?.cols * spriteData?.frameWidth * spriteData?.scale || 0}px`,
-          height: `${spriteData?.rows * spriteData?.frameHeight * spriteData?.scale || 0}px`,
-          transform: `translateX(-${frame.col * (spriteData?.frameWidth || 0) * spriteData?.scale || 0}px) translateY(-${frame.row * (spriteData?.frameHeight || 0) * spriteData?.scale || 0}px)`,
-          display: spriteData?.url ? 'block' : 'none',
-        }" loading="lazy" @error="handleFrameImgError(frame.index)" />
+        }"
+      >
+        <img
+          v-if="spriteData"
+          :src="spriteData?.url"
+          alt="视频帧"
+          class="absolute pointer-events-none object-cover"
+          :style="{
+            width: `${spriteData?.cols * spriteData?.frameWidth * spriteData?.scale || 0}px`,
+            height: `${spriteData?.rows * spriteData?.frameHeight * spriteData?.scale || 0}px`,
+            transform: `translateX(-${frame.col * (spriteData?.frameWidth || 0) * spriteData?.scale || 0}px) translateY(-${frame.row * (spriteData?.frameHeight || 0) * spriteData?.scale || 0}px)`,
+            display: spriteData?.url ? 'block' : 'none',
+          }"
+          loading="lazy"
+          @error="handleFrameImgError(frame.index)"
+        />
         <!-- 兜底提示 -->
-        <div v-if="!spriteData?.url" class="absolute inset-0 flex items-center justify-center text-gray-400 text-xs">
+        <div
+          v-if="!spriteData?.url"
+          class="absolute inset-0 flex items-center justify-center text-gray-400 text-xs"
+        >
           帧{{ frame.index }}加载失败
         </div>
       </div>
