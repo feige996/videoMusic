@@ -50,7 +50,7 @@ const fullFrameMeta = ref<CachedFullFrameData | null>(null)
  */
 function calculateTotalFrames(videoAspectRatio: number, containerWidth: number): number {
   const singleFrameWidth = frameHeight * videoAspectRatio
-  const baseFrames = Math.ceil(containerWidth / singleFrameWidth)
+  const baseFrames = Math.ceil((containerWidth * 1.2) / singleFrameWidth)
   const totalFrames = baseFrames + FRAME_SURPLUS
   return Math.max(totalFrames, 10) // 兜底：至少10帧
 }
