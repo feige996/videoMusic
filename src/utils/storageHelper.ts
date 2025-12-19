@@ -1,7 +1,5 @@
-import type { VideoMetadata } from '@/components/types'
-
 /**
- * 检测是否是存储容量超出错误
+ * 检测是否是存储容量超出错误, indexDB 错误
  * @param error 错误对象
  * @returns 是否是存储容量超出错误
  */
