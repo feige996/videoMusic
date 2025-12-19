@@ -83,11 +83,17 @@ watch(
   () => props.videoUrl,
   async (newUrl, oldUrl) => {
     if (newUrl !== oldUrl) {
+      // 设置isLoading为true，确保用户看到加载效果
+      isLoading.value = true
       cleanupResources()
       // 重置预加载元信息引用
       preloadedMetadataRef.value = props.preloadedMetadata
-      // 等待元信息更新后再初始化
+      // 等待元信息更新和DOM更新后，显式调用初始化函数
       await nextTick()
+      // 直接调用初始化函数，不再等待watchEffect触发
+      if (newUrl) {
+        await initializeWithMetadata()
+      }
     }
   },
   { immediate: false },

@@ -89,6 +89,8 @@ export function useVideoFrames(params: {
     if (cachedMeta && cachedSprite) {
       print('缓存命中')
       fullFrameMeta.value = cachedMeta
+      // 确保缓存命中时isLoading为false
+      isLoading.value = false
       return { meta: cachedMeta, sprite: cachedSprite.spriteInfo }
     }
 
