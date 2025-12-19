@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import localforage from 'localforage'
 import { VIDEO_FRAME_CACHE_EXPIRE } from '@/data/config'
 import type { VideoMetadata } from '@/components/types'
+import { setItemWithQuotaHandling } from '@/utils/storageHelper'
 
 /**
  * 检测视频是否有原声
@@ -151,16 +152,13 @@ export function useVideoMetadata() {
       const metadata = await getVideoMetadata(videoUrl)
       videoMetadata.value = metadata
 
-      // 存入缓存
-      try {
-        await videoMetadataStore.setItem(cacheKey, {
-          data: metadata,
-          timestamp: Date.now(),
-        })
-        console.log('保存元信息缓存成功:', metadata)
-      } catch (error) {
-        console.warn('保存元信息缓存失败:', error)
+      // 存入缓存，使用工具函数处理存储容量超出的情况
+      const cacheData = {
+        data: metadata,
+        timestamp: Date.now(),
       }
+      await setItemWithQuotaHandling(videoMetadataStore, cacheKey, cacheData)
+      console.log('保存元信息缓存成功:', metadata)
 
       return metadata
     } catch (error) {
