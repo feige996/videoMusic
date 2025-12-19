@@ -39,7 +39,7 @@ async function detectVideoAudio(videoUrl: string): Promise<boolean> {
 
     // 尝试解码音频数据
     await audioContext.decodeAudioData(arrayBuffer)
-
+    console.log('视频原声检测结果: 有原声')
     // 解码成功，说明视频包含可解码的音频数据
     return true
   } catch (error) {
@@ -138,6 +138,7 @@ export function useVideoMetadata() {
 
       if (cached && Date.now() - cached.timestamp < VIDEO_FRAME_CACHE_EXPIRE) {
         videoMetadata.value = cached.data
+        console.log('读取元信息缓存成功:', cached.data)
         return cached.data
       }
     } catch (error) {
@@ -156,6 +157,7 @@ export function useVideoMetadata() {
           data: metadata,
           timestamp: Date.now(),
         })
+        console.log('保存元信息缓存成功:', metadata)
       } catch (error) {
         console.warn('保存元信息缓存失败:', error)
       }
