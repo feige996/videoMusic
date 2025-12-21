@@ -35,18 +35,11 @@ export async function getVideoFramesSerial(
         const videoHeight = video.videoHeight
         const videoAspectRatio = videoWidth / videoHeight
 
-        // 关键优化：根据视频时长动态调整帧数和采样间隔
+        // 直接使用请求的帧数，不再根据视频时长自动调整
+        // 用户需要多少帧就提取多少帧，保持灵活性
         let adjustedFrameCount = frameCount
-        // 短视频优化：对于短时长视频，减少帧数以确保足够的采样间隔
-        // 对于小于10秒的视频，减少帧数确保采样间隔至少0.5秒
-        if (duration < 10) {
-          // 确保最小采样间隔至少为0.5秒
-          const minRequiredInterval = 0.5
-          const maxPossibleFrames = Math.floor(duration / minRequiredInterval) + 1
-          // 限制最大帧数，但至少保留5帧
-          adjustedFrameCount = Math.max(5, Math.min(frameCount, maxPossibleFrames))
-          console.log(`短视频优化: 时长=${duration.toFixed(2)}秒, 调整后帧数=${adjustedFrameCount}`)
-        }
+        // 只做最小帧数限制，确保至少有1帧
+        adjustedFrameCount = Math.max(1, adjustedFrameCount)
 
         const frames: HTMLCanvasElement[] = []
         // 均匀提取帧（基于视频时长）
@@ -186,17 +179,11 @@ export async function getVideoFramesConcurrent(
   const videoHeight = metaVideo.videoHeight
   const videoAspectRatio = videoWidth / videoHeight
 
-  // 关键优化：根据视频时长动态调整帧数和采样间隔
+  // 直接使用请求的帧数，不再根据视频时长自动调整
+  // 用户需要多少帧就提取多少帧，保持灵活性
   let adjustedFrameCount = frameCount
-  // 短视频优化：对于短时长视频，减少帧数以确保足够的采样间隔
-  if (duration < 10) {
-    // 确保最小采样间隔至少为0.5秒
-    const minRequiredInterval = 0.5
-    const maxPossibleFrames = Math.floor(duration / minRequiredInterval) + 1
-    // 限制最大帧数，但至少保留5帧
-    adjustedFrameCount = Math.max(5, Math.min(frameCount, maxPossibleFrames))
-    console.log(`短视频优化(并发): 时长=${duration.toFixed(2)}秒, 调整后帧数=${adjustedFrameCount}`)
-  }
+  // 只做最小帧数限制，确保至少有1帧
+  adjustedFrameCount = Math.max(1, adjustedFrameCount)
 
   // 释放元信息video
   metaVideo.removeAttribute('src')
