@@ -31,6 +31,25 @@ const useConcurrent = ref(false)
 
 // 移除显示模式切换，现在同时显示两种模式
 
+// 将Frame对象转换为Image URL
+const frameToImageUrl = (frame: HTMLCanvasElement | ImageData | HTMLImageElement): string => {
+  if (frame instanceof HTMLCanvasElement) {
+    return frame.toDataURL('image/jpeg')
+  } else if (frame instanceof ImageData) {
+    const canvas = document.createElement('canvas')
+    canvas.width = frame.width
+    canvas.height = frame.height
+    const ctx = canvas.getContext('2d')
+    if (ctx) {
+      ctx.putImageData(frame, 0, 0)
+      return canvas.toDataURL('image/jpeg')
+    }
+  } else if (frame instanceof HTMLImageElement) {
+    return frame.src
+  }
+  return ''
+}
+
 const { initializeVideoFrames, cleanupResources, originalFrames } = useVideoFrames({
   videoUrl: videoUrlRef,
   frameContainer,
@@ -168,18 +187,13 @@ watch(
             height: `${(spriteData?.frameHeight || 45) * (spriteData?.scale || 1)}px`,
           }"
         >
-          <canvas
+          <!-- 使用img标签直接渲染，性能更好且避免类型错误 -->
+          <img
             v-if="frame"
-            :ref="
-              (el: Element | null) => {
-                if (el instanceof HTMLCanvasElement && frame) {
-                  const ctx = el.getContext('2d')
-                  if (ctx) ctx.drawImage(frame, 0, 0)
-                }
-              }
-            "
+            :src="frameToImageUrl(frame)"
             class="w-full h-full object-cover"
-          ></canvas>
+            alt="视频帧"
+          />
           <!-- 原始帧信息 -->
           <div
             class="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs p-1 text-center"
