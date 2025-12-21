@@ -61,6 +61,8 @@ export function useVideoFrames(params: {
   })
 
   const fullFrameMeta = ref<CachedFullFrameData | null>(null)
+  // 保存原始帧数据，用于直接显示模式
+  const originalFrames = ref<HTMLCanvasElement[]>([])
 
   /**
    * 计算需要提取的视频帧数
@@ -195,18 +197,20 @@ export function useVideoFrames(params: {
       }
       await setItemWithQuotaHandling(videoFrameStore, spriteCacheKey, spriteDataCache)
 
-      // 延迟清理帧数据，确保雪碧图已经成功生成
-      // 注意：不再立即清空frame尺寸，这会导致生成的帧数据无效
-      // 使用setTimeout允许当前执行栈完成后再清理
+      // 保存原始帧数据供直接显示模式使用
+      originalFrames.value = [...fullVideoInfo.frames]
+
+      // 延迟清理不再需要的帧数据引用，但保留originalFrames中的原始数据
       setTimeout(() => {
-        fullVideoInfo.frames.forEach((frame) => {
-          // 清理引用但保留有效帧数据
-          if (frame) {
+        // 清理fullVideoInfo中的帧数据，避免内存泄漏
+        fullVideoInfo.frames.forEach((frame, index) => {
+          // 只清理不在originalFrames中的帧，或者如果是同一个引用则保留
+          if (frame && frame !== originalFrames.value[index]) {
             frame.width = 0
             frame.height = 0
           }
         })
-      }, 0)
+      }, 1000) // 稍微延迟一点，确保所有渲染都完成
 
       return { meta: metaData, sprite: fullSpriteInfo }
     } finally {
@@ -335,6 +339,7 @@ export function useVideoFrames(params: {
     }
     fullFrameMeta.value = null
     spriteData.value = null
+    originalFrames.value = [] // 清理原始帧数据避免内存泄漏
     type HasCancel = { cancel: () => void }
     if (throttledSample && typeof (throttledSample as HasCancel).cancel === 'function') {
       ;(throttledSample as HasCancel).cancel()
@@ -364,5 +369,7 @@ export function useVideoFrames(params: {
     initializeVideoFrames,
     cleanupResources,
     handleResize,
+    originalFrames, // 暴露原始帧数据供组件使用
+    fullFrameMeta, // 暴露帧元数据
   }
 }
