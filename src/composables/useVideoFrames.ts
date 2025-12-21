@@ -88,9 +88,11 @@ export function useVideoFrames(params: {
 
     const isConcurrent = useConcurrent?.value ?? true
     const modeSuffix = isConcurrent ? 'concurrent' : 'serial'
-    const videoMetaCacheKey = `video_meta_${videoUrlRef.value}_${frameHeight}_${modeSuffix}`
-    const spriteCacheKey = `video_sprite_${videoUrlRef.value}_${frameHeight}_${modeSuffix}`
-    const originalFramesCacheKey = `video_original_frames_${videoUrlRef.value}_${frameHeight}_${modeSuffix}`
+    // 添加版本标识，确保使用新的帧提取逻辑而不使用旧缓存
+    const version = 'v2' // 版本升级以避免使用旧缓存
+    const videoMetaCacheKey = `video_meta_${version}_${videoUrlRef.value}_${frameHeight}_${modeSuffix}`
+    const spriteCacheKey = `video_sprite_${version}_${videoUrlRef.value}_${frameHeight}_${modeSuffix}`
+    const originalFramesCacheKey = `video_original_frames_${version}_${videoUrlRef.value}_${frameHeight}_${modeSuffix}`
 
     let cachedMeta: CachedFullFrameData | null = null
     try {
@@ -248,8 +250,8 @@ export function useVideoFrames(params: {
       // 保存原始帧数据供直接显示模式使用
       originalFrames.value = [...fullVideoInfo.frames]
 
-      // 缓存原始帧数据
-      const originalFramesCacheKey = `video_original_frames_${videoUrlRef.value}_${frameHeight}_${modeSuffix}`
+      // 缓存原始帧数据，使用带版本标识的键名
+      const originalFramesCacheKey = `video_original_frames_${version}_${videoUrlRef.value}_${frameHeight}_${modeSuffix}`
       try {
         print(`开始缓存 ${fullVideoInfo.frames.length} 个原始帧数据`)
         // 将canvas转换为可缓存的数据格式
@@ -337,7 +339,9 @@ export function useVideoFrames(params: {
 
     const isConcurrent = useConcurrent?.value ?? true
     const modeSuffix = isConcurrent ? 'concurrent' : 'serial'
-    const spriteCacheKey = `video_sprite_${videoUrlRef.value}_${frameHeight}_${modeSuffix}`
+    // 添加版本标识，确保与initPreciseFramePool中使用的键名一致
+    const version = 'v2'
+    const spriteCacheKey = `video_sprite_${version}_${videoUrlRef.value}_${frameHeight}_${modeSuffix}`
     let spriteInfo: SpriteInfo | null = null
     try {
       const storedSprite = await videoFrameStore.getItem<CachedFullSpriteData>(spriteCacheKey)
