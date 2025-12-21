@@ -10,7 +10,7 @@ export interface VideoFramesResult {
 }
 
 /**
- * 从视频中提取指定数量的帧（串行版本 - 旧版）
+ * 从视频中提取指定数量的帧（串行版本 - 优化版）
  * @param videoUrl 视频URL
  * @param frameCount 需要提取的帧数
  * @returns 视频帧信息+帧Canvas数组
@@ -35,32 +35,104 @@ export async function getVideoFramesSerial(
         const videoHeight = video.videoHeight
         const videoAspectRatio = videoWidth / videoHeight
 
+        // 关键优化：根据视频时长动态调整帧数和采样间隔
+        let adjustedFrameCount = frameCount
+        // 短视频优化：对于短时长视频，减少帧数以确保足够的采样间隔
+        // 对于小于10秒的视频，减少帧数确保采样间隔至少0.5秒
+        if (duration < 10) {
+          // 确保最小采样间隔至少为0.5秒
+          const minRequiredInterval = 0.5
+          const maxPossibleFrames = Math.floor(duration / minRequiredInterval) + 1
+          // 限制最大帧数，但至少保留5帧
+          adjustedFrameCount = Math.max(5, Math.min(frameCount, maxPossibleFrames))
+          console.log(`短视频优化: 时长=${duration.toFixed(2)}秒, 调整后帧数=${adjustedFrameCount}`)
+        }
+
         const frames: HTMLCanvasElement[] = []
         // 均匀提取帧（基于视频时长）
-        for (let i = 0; i < frameCount; i++) {
+        for (let i = 0; i < adjustedFrameCount; i++) {
           // 计算当前帧的时间点
-          const time = (i / frameCount) * duration
+          // 使用adjustedFrameCount而不是frameCount，确保采样间隔合理
+          const time = (i / adjustedFrameCount) * duration
           video.currentTime = time
 
-          // 等待视频帧加载完成
-          await new Promise((resolveSeek) => {
-            const onSeeked = () => {
-              video.removeEventListener('seeked', onSeeked)
-              resolveSeek(null)
+          // 等待视频帧加载完成 - 添加超时保护
+          try {
+            await new Promise<void>((resolveSeek, rejectSeek) => {
+              let resolved = false
+
+              const onSeeked = () => {
+                if (resolved) return
+                resolved = true
+                video.removeEventListener('seeked', onSeeked)
+                video.removeEventListener('error', onError)
+                resolveSeek()
+              }
+
+              const onError = () => {
+                if (resolved) return
+                resolved = true
+                video.removeEventListener('seeked', onSeeked)
+                video.removeEventListener('error', onError)
+                rejectSeek(new Error(`Seek failed at ${time}`))
+              }
+
+              video.addEventListener('seeked', onSeeked)
+              video.addEventListener('error', onError)
+
+              // 增加seek超时保护 - 短视频给更长的超时时间（5秒）
+              const timeoutMs = duration < 10 ? 5000 : 3000
+              setTimeout(() => {
+                if (!resolved) {
+                  resolved = true
+                  video.removeEventListener('seeked', onSeeked)
+                  video.removeEventListener('error', onError)
+                  console.warn(`Seek timeout at ${time.toFixed(2)}s`)
+                  // 超时不抛出错误，而是resolve以继续执行
+                  resolveSeek()
+                }
+              }, timeoutMs)
+            })
+
+            // 短暂延迟确保帧完全渲染
+            if (duration < 10) {
+              await new Promise((resolveDelay) => setTimeout(resolveDelay, 100))
             }
-            video.addEventListener('seeked', onSeeked)
-          })
+          } catch (seekError) {
+            console.warn(`Seek error: ${seekError}`)
+            // 继续处理下一个帧而不是立即失败
+            continue
+          }
 
           // 创建Canvas并绘制帧
           const canvas = document.createElement('canvas')
           canvas.width = videoWidth
           canvas.height = videoHeight
           const ctx = canvas.getContext('2d')
-          if (!ctx) continue
+          if (!ctx) {
+            console.warn('无法获取Canvas上下文')
+            continue
+          }
 
-          ctx.drawImage(video, 0, 0, videoWidth, videoHeight)
-          frames.push(canvas)
+          try {
+            ctx.drawImage(video, 0, 0, videoWidth, videoHeight)
+            frames.push(canvas)
+          } catch (drawError) {
+            console.warn(`绘制帧失败: ${drawError}`)
+            // 继续处理下一个帧
+            continue
+          }
         }
+
+        // 验证是否提取到了足够的有效帧
+        if (frames.length === 0) {
+          throw new Error('未能提取到任何有效帧')
+        }
+
+        // 如果提取到的帧数少于请求的数量但至少有1帧，仍然返回成功
+        console.log(
+          `提取帧完成: 请求=${frameCount}, 实际=${frames.length}, 时长=${duration.toFixed(2)}s`,
+        )
 
         resolve({
           frames,
@@ -114,13 +186,26 @@ export async function getVideoFramesConcurrent(
   const videoHeight = metaVideo.videoHeight
   const videoAspectRatio = videoWidth / videoHeight
 
+  // 关键优化：根据视频时长动态调整帧数和采样间隔
+  let adjustedFrameCount = frameCount
+  // 短视频优化：对于短时长视频，减少帧数以确保足够的采样间隔
+  if (duration < 10) {
+    // 确保最小采样间隔至少为0.5秒
+    const minRequiredInterval = 0.5
+    const maxPossibleFrames = Math.floor(duration / minRequiredInterval) + 1
+    // 限制最大帧数，但至少保留5帧
+    adjustedFrameCount = Math.max(5, Math.min(frameCount, maxPossibleFrames))
+    console.log(`短视频优化(并发): 时长=${duration.toFixed(2)}秒, 调整后帧数=${adjustedFrameCount}`)
+  }
+
   // 释放元信息video
   metaVideo.removeAttribute('src')
   metaVideo.load()
 
-  // 2. 创建并发池
+  // 2. 创建并发池 - 短视频降低并发数以减少浏览器压力
   const poolInitStart = performance.now()
-  const poolSize = Math.min(concurrency, frameCount)
+  const shortVideoConcurrency = Math.min(concurrency, 3) // 短视频最大3个并发
+  const poolSize = Math.min(duration < 10 ? shortVideoConcurrency : concurrency, adjustedFrameCount)
   const videoPool: HTMLVideoElement[] = []
 
   for (let i = 0; i < poolSize; i++) {
@@ -153,13 +238,13 @@ export async function getVideoFramesConcurrent(
   )
   console.log(`并发池初始化耗时: ${(performance.now() - poolInitStart).toFixed(2)}ms`)
 
-  // 3. 准备任务列表
-  const tasks = Array.from({ length: frameCount }, (_, i) => ({
+  // 3. 准备任务列表 - 使用调整后的帧数
+  const tasks = Array.from({ length: adjustedFrameCount }, (_, i) => ({
     index: i,
-    time: (i / frameCount) * duration,
+    time: (i / adjustedFrameCount) * duration,
   }))
 
-  const frames = new Array<HTMLCanvasElement>(frameCount)
+  const frames = new Array<HTMLCanvasElement>(adjustedFrameCount)
   let taskIndex = 0
 
   // 4. 定义Worker函数
