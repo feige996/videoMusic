@@ -1,11 +1,11 @@
 <script lang="ts" setup>
 import VideoContainer from './components/VideoContainer.vue'
 
-import longVideo from '@/assets/long.mp4' // 本地视频资源
-import shortVideo from '@/assets/10s.mp4' // 本地视频资源
-import hengtu1 from '@/assets/hengtu1.mp4' // 本地视频资源
+import longVideo from '@/assets/long.mp4' // 本地视频资源，3min52s，横图
+import shortVideo from '@/assets/short.mp4' // 本地视频资源,10S, 竖图
+import hengtu1 from '@/assets/hengtu1.mp4' // 本地视频资源，5S, 横图
 
-const localVideo = hengtu1
+const localVideo = shortVideo
 const remoteVideo = 'https://oss.laf.run/ukw0y1-site/beautiful-girl-with-audio.mp4' // 远程资源
 
 const videoUrl = ref(localVideo)
