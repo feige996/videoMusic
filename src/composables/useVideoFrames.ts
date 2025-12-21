@@ -85,7 +85,7 @@ export function useVideoFrames(params: {
       } else if (storedMeta) {
         await videoFrameStore.removeItem(videoMetaCacheKey)
       }
-    } catch { }
+    } catch {}
 
     let cachedSprite: CachedFullSpriteData | null = null
     try {
@@ -95,7 +95,7 @@ export function useVideoFrames(params: {
       } else if (storedSprite) {
         await videoFrameStore.removeItem(spriteCacheKey)
       }
-    } catch { }
+    } catch {}
 
     if (cachedMeta && cachedSprite) {
       print('缓存命中')
@@ -220,6 +220,7 @@ export function useVideoFrames(params: {
       const index = Math.floor(ratio * (totalFrames - 1))
       selectedIndexes.push(index)
     }
+    console.log('selectedIndexes', selectedIndexes)
 
     const isConcurrent = useConcurrent?.value ?? true
     const modeSuffix = isConcurrent ? 'concurrent' : 'serial'
@@ -264,14 +265,14 @@ export function useVideoFrames(params: {
       scale,
     }
 
-    Object.assign(container.style, {
-      width: '100%',
-      height: `${containerHeight}px`,
-      display: 'flex',
-      overflowX: 'auto',
-      gap: '0',
-      scrollbarWidth: 'thin',
-    })
+    // Object.assign(container.style, {
+    //   width: '100%',
+    //   height: `${containerHeight}px`,
+    //   display: 'flex',
+    //   overflowX: 'auto',
+    //   gap: '0',
+    //   scrollbarWidth: 'thin',
+    // })
     print(`采样完成: 帧数 ${actualNeed}, 比例 ${scale.toFixed(3)}`)
   }
 
@@ -304,7 +305,7 @@ export function useVideoFrames(params: {
     spriteData.value = null
     type HasCancel = { cancel: () => void }
     if (throttledSample && typeof (throttledSample as HasCancel).cancel === 'function') {
-      ; (throttledSample as HasCancel).cancel()
+      ;(throttledSample as HasCancel).cancel()
     }
   }
 

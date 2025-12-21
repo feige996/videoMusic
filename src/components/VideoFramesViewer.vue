@@ -95,14 +95,16 @@ watch(
           v-model="useConcurrent"
           class="form-checkbox rounded text-blue-600 focus:ring-blue-500 h-4 w-4 transition duration-150 ease-in-out"
         />
-        <span class="ml-2 text-sm text-gray-700 font-medium">启用并发提取优化 (Check Console for Timing)</span>
+        <span class="ml-2 text-sm text-gray-700 font-medium">
+          启用并发提取优化 (Check Console for Timing)
+        </span>
       </label>
     </div>
 
     <!-- 视频帧容器 -->
     <div
       ref="frameContainer"
-      class="w-full overflow-x-auto flex transition-opacity duration-200"
+      class="w-full overflow-hidden flex transition-opacity duration-200"
       :class="{ 'opacity-50 cursor-wait': isLoading }"
     >
       <div
