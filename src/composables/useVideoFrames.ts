@@ -214,12 +214,24 @@ export function useVideoFrames(params: {
     const needFrameCount = Math.max(1, Math.ceil(containerWidth / displayFrameWidth))
     const actualNeed = Math.min(needFrameCount, totalFrames)
 
+    // 计算等距采样的帧索引
     const selectedIndexes: number[] = []
+
+    // 确保分母不为0（当只需要1帧时）
+    const denominator = Math.max(1, actualNeed - 1)
+
     for (let i = 0; i < actualNeed; i++) {
-      const ratio = i / Math.max(1, actualNeed - 1)
-      const index = Math.floor(ratio * (totalFrames - 1))
-      selectedIndexes.push(index)
+      // 计算当前帧在采样序列中的相对位置 (0 到 1 之间)
+      const normalizedPosition = i / denominator
+
+      // 将相对位置映射到总帧数范围内，计算出实际的帧索引
+      // 减1是因为索引从0开始，Math.floor确保得到整数索引
+      const frameIndex = Math.floor(normalizedPosition * (totalFrames - 1))
+
+      selectedIndexes.push(frameIndex)
     }
+    console.log('needFrameCount', needFrameCount, totalFrames)
+    console.log('actualNeed', actualNeed)
     console.log('selectedIndexes', selectedIndexes)
 
     const isConcurrent = useConcurrent?.value ?? true
