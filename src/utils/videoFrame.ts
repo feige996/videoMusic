@@ -242,46 +242,118 @@ export async function getVideoFramesConcurrent(
 export const getVideoFrames = getVideoFramesConcurrent
 
 // src/utils/videoFrame.ts
+/**
+ * 创建视频帧精灵图
+ * @param frames 视频帧Canvas数组
+ * @param frameWidth 单帧宽度
+ * @param frameHeight 单帧高度
+ * @param cols 精灵图列数
+ * @returns 精灵图信息（包含Base64 URL和行列信息）
+ */
 export async function createSpriteImage(
   frames: HTMLCanvasElement[],
   frameWidth: number,
   frameHeight: number,
   cols: number,
 ): Promise<{
-  spriteUrl: string // 改为Base64字符串
+  spriteUrl: string // Base64字符串
   rows: number
   cols: number
 }> {
   return new Promise((resolve) => {
+    // 1. 参数验证
+    if (!frames || frames.length === 0) {
+      console.error('createSpriteImage: 无效的frames数组')
+      resolve({ spriteUrl: '', rows: 0, cols: 0 })
+      return
+    }
+
+    // 防止无效尺寸
+    frameWidth = Math.max(1, frameWidth || 1)
+    frameHeight = Math.max(1, frameHeight || 1)
+    cols = Math.max(1, Math.min(cols || 1, frames.length))
+
+    // 2. 计算精灵图尺寸
     const rows = Math.ceil(frames.length / cols)
     const spriteWidth = cols * frameWidth
     const spriteHeight = rows * frameHeight
 
+    console.log(
+      `createSpriteImage: 帧数=${frames.length}, 尺寸=${spriteWidth}x${spriteHeight}, 行列=${rows}x${cols}`,
+    )
+
+    // 3. 创建并配置Canvas
     const spriteCanvas = document.createElement('canvas')
     spriteCanvas.width = spriteWidth
     spriteCanvas.height = spriteHeight
-    const ctx = spriteCanvas.getContext('2d')
+
+    const ctx = spriteCanvas.getContext('2d', { willReadFrequently: true })
     if (!ctx) {
+      console.error('createSpriteImage: 无法获取Canvas上下文')
       resolve({ spriteUrl: '', rows: 0, cols: 0 })
       return
     }
-    console.log(frames)
 
-    // 绘制所有帧到精灵图
-    frames.forEach((frame, index) => {
-      if (!frame) return // 容错：跳过空帧
-      const row = Math.floor(index / cols)
-      const col = index % cols
-      ctx.drawImage(frame, col * frameWidth, row * frameHeight)
-    })
+    // 4. 预填充画布为透明背景
+    ctx.clearRect(0, 0, spriteWidth, spriteHeight)
 
-    // 关键：生成Base64字符串（替代Blob URL）
-    // 用webp格式压缩体积，质量0.8（可调整）
-    // 压缩质量0.1（更小体积）,因为界面上视频帧一般尺寸都很小所以0.1也很清晰。
-    // (竖图）0.8时，需要20S ,0.1只需要5.4S，0.01时需要5.15S。（折中使用0.1)
-    const spriteUrl = spriteCanvas.toDataURL('image/webp', 0.1)
-    console.log(spriteUrl)
-    resolve({ spriteUrl, rows, cols })
+    // 5. 统计有效帧数
+    let validFramesCount = 0
+
+    // 6. 绘制所有有效帧到精灵图
+    for (let i = 0; i < frames.length; i++) {
+      const frame = frames[i]
+      if (!frame) {
+        console.warn(`createSpriteImage: 跳过空帧索引=${i}`)
+        continue
+      }
+
+      try {
+        const row = Math.floor(i / cols)
+        const col = i % cols
+        const x = col * frameWidth
+        const y = row * frameHeight
+
+        // 检查帧尺寸
+        if (frame.width === 0 || frame.height === 0) {
+          console.warn(`createSpriteImage: 帧索引=${i} 尺寸无效: ${frame.width}x${frame.height}`)
+          continue
+        }
+
+        ctx.drawImage(frame, x, y, frameWidth, frameHeight)
+        validFramesCount++
+      } catch (error) {
+        console.error(`createSpriteImage: 绘制帧索引=${i}失败:`, error)
+      }
+    }
+
+    console.log(`createSpriteImage: 有效帧数=${validFramesCount}/${frames.length}`)
+
+    // 7. 生成Base64 URL
+    try {
+      // 如果没有绘制任何有效帧，返回空URL
+      if (validFramesCount === 0) {
+        console.error('createSpriteImage: 没有绘制任何有效帧')
+        resolve({ spriteUrl: '', rows: 0, cols: 0 })
+        return
+      }
+
+      // 生成webp格式的Base64字符串
+      const spriteUrl = spriteCanvas.toDataURL('image/webp', 0.1)
+
+      // 验证生成的URL是否有效
+      if (!spriteUrl || spriteUrl === 'data:,') {
+        console.error('createSpriteImage: 生成的spriteUrl无效')
+        resolve({ spriteUrl: '', rows: 0, cols: 0 })
+        return
+      }
+
+      console.log(`createSpriteImage: 成功生成精灵图，URL长度=${spriteUrl.length}`)
+      resolve({ spriteUrl, rows, cols })
+    } catch (error) {
+      console.error('createSpriteImage: 生成Base64失败:', error)
+      resolve({ spriteUrl: '', rows: 0, cols: 0 })
+    }
   })
 }
 

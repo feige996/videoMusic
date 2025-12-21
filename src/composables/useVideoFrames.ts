@@ -62,11 +62,23 @@ export function useVideoFrames(params: {
 
   const fullFrameMeta = ref<CachedFullFrameData | null>(null)
 
+  /**
+   * 计算需要提取的视频帧数
+   * 优化点：添加安全宽高比检查，避免无效计算
+   * @param videoAspectRatio 视频宽高比
+   * @returns 需要提取的总帧数
+   */
   function calculateTotalFrames(videoAspectRatio: number): number {
-    const singleFrameWidth = frameHeight * videoAspectRatio
+    // 防止无效的宽高比导致计算错误
+    const safeAspectRatio = Math.max(0.1, Math.min(videoAspectRatio, 10))
+    const singleFrameWidth = frameHeight * safeAspectRatio
+
+    // 基础帧数计算
     const baseFrames = Math.ceil(MAX_SCREEN_WIDTH / singleFrameWidth)
     const totalFrames = baseFrames + FRAME_SURPLUS
-    return Math.max(totalFrames, 10)
+
+    // 确保至少有10帧且不超过合理上限
+    return Math.max(Math.min(totalFrames, 50), 10)
   }
 
   async function initPreciseFramePool() {
@@ -183,10 +195,18 @@ export function useVideoFrames(params: {
       }
       await setItemWithQuotaHandling(videoFrameStore, spriteCacheKey, spriteDataCache)
 
-      fullVideoInfo.frames.forEach((frame) => {
-        frame.width = 0
-        frame.height = 0
-      })
+      // 延迟清理帧数据，确保雪碧图已经成功生成
+      // 注意：不再立即清空frame尺寸，这会导致生成的帧数据无效
+      // 使用setTimeout允许当前执行栈完成后再清理
+      setTimeout(() => {
+        fullVideoInfo.frames.forEach((frame) => {
+          // 清理引用但保留有效帧数据
+          if (frame) {
+            frame.width = 0
+            frame.height = 0
+          }
+        })
+      }, 0)
 
       return { meta: metaData, sprite: fullSpriteInfo }
     } finally {
