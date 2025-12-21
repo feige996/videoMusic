@@ -158,6 +158,7 @@ watch(
         class="w-full overflow-hidden flex transition-opacity duration-200"
         :class="{ 'opacity-50 cursor-wait': isLoading }"
       >
+        原始帧数量：{{ originalFrames.length }}
         <div
           v-for="(frame, index) in originalFrames"
           :key="`original-${index}`"
