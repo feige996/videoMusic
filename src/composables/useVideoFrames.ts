@@ -90,6 +90,7 @@ export function useVideoFrames(params: {
     const modeSuffix = isConcurrent ? 'concurrent' : 'serial'
     const videoMetaCacheKey = `video_meta_${videoUrlRef.value}_${frameHeight}_${modeSuffix}`
     const spriteCacheKey = `video_sprite_${videoUrlRef.value}_${frameHeight}_${modeSuffix}`
+    const originalFramesCacheKey = `video_original_frames_${videoUrlRef.value}_${frameHeight}_${modeSuffix}`
 
     let cachedMeta: CachedFullFrameData | null = null
     try {
@@ -111,9 +112,56 @@ export function useVideoFrames(params: {
       }
     } catch {}
 
+    // 尝试从缓存加载原始帧数据
+    let cachedOriginalFrames: HTMLCanvasElement[] | null = null
+    try {
+      print('尝试加载原始帧缓存: ' + originalFramesCacheKey)
+      const storedFrames = await videoFrameStore.getItem<Blob[]>(originalFramesCacheKey)
+
+      if (storedFrames && storedFrames.length > 0) {
+        const cacheAge = Date.now() - (storedFrames[0] as any)?.timestamp || 0
+        print(`找到原始帧缓存，数量: ${storedFrames.length}, 缓存年龄: ${cacheAge}ms`)
+
+        if (cacheAge < VIDEO_FRAME_CACHE_EXPIRE) {
+          print('缓存未过期，恢复原始帧数据')
+          // 恢复原始帧数据
+          cachedOriginalFrames = await Promise.all(
+            storedFrames.map(async (frameBlob, index) => {
+              const canvas = document.createElement('canvas')
+              const img = new Image()
+              img.src = URL.createObjectURL(frameBlob as unknown as Blob)
+              await new Promise<void>((resolve) => {
+                img.onload = () => {
+                  canvas.width = img.width
+                  canvas.height = img.height
+                  const ctx = canvas.getContext('2d')
+                  if (ctx) ctx.drawImage(img, 0, 0)
+                  URL.revokeObjectURL(img.src)
+                  resolve()
+                }
+              })
+              return canvas
+            }),
+          )
+          print(`成功恢复 ${cachedOriginalFrames.length} 个原始帧数据`)
+        } else {
+          print('缓存已过期，移除旧缓存')
+          await videoFrameStore.removeItem(originalFramesCacheKey)
+        }
+      } else {
+        print('未找到原始帧缓存')
+      }
+    } catch (error) {
+      print('加载原始帧缓存失败: ' + error)
+    }
+
     if (cachedMeta && cachedSprite) {
       print('缓存命中')
       fullFrameMeta.value = cachedMeta
+      // 如果有缓存的原始帧数据，直接使用
+      if (cachedOriginalFrames) {
+        originalFrames.value = cachedOriginalFrames
+      }
       // 确保缓存命中时isLoading为false
       isLoading.value = false
       return { meta: cachedMeta, sprite: cachedSprite.spriteInfo }
@@ -199,6 +247,35 @@ export function useVideoFrames(params: {
 
       // 保存原始帧数据供直接显示模式使用
       originalFrames.value = [...fullVideoInfo.frames]
+
+      // 缓存原始帧数据
+      const originalFramesCacheKey = `video_original_frames_${videoUrlRef.value}_${frameHeight}_${modeSuffix}`
+      try {
+        print(`开始缓存 ${fullVideoInfo.frames.length} 个原始帧数据`)
+        // 将canvas转换为可缓存的数据格式
+        const frameBlobs = await Promise.all(
+          fullVideoInfo.frames.map(async (frame) => {
+            return new Promise<Blob>((resolve) => {
+              frame.toBlob((blob) => {
+                if (blob) {
+                  // 添加时间戳用于缓存过期检查
+                  const blobWithTimestamp = new Blob([blob], { type: blob.type })
+                  ;(blobWithTimestamp as any).timestamp = Date.now()
+                  resolve(blobWithTimestamp)
+                } else {
+                  resolve(new Blob())
+                }
+              })
+            })
+          }),
+        )
+        print(`转换完成，准备缓存 ${frameBlobs.length} 个帧数据块`)
+        // 尝试缓存原始帧数据
+        await setItemWithQuotaHandling(videoFrameStore, originalFramesCacheKey, frameBlobs)
+        print('原始帧数据缓存成功')
+      } catch (error) {
+        print('缓存原始帧数据失败: ' + error)
+      }
 
       // 延迟清理不再需要的帧数据引用，但保留originalFrames中的原始数据
       setTimeout(() => {
@@ -334,12 +411,16 @@ export function useVideoFrames(params: {
   }
 
   function cleanupResources() {
+    print('执行资源清理，保留原始帧数据')
     if (frameData.value && frameData.value.length > 0) {
       frameData.value = []
     }
     fullFrameMeta.value = null
     spriteData.value = null
-    originalFrames.value = [] // 清理原始帧数据避免内存泄漏
+    // 不再清空originalFrames，而是在重新初始化时自动更新
+    // 这样可以避免刷新页面后数据丢失
+    print(`清理后原始帧数量: ${originalFrames.value.length}`)
+    // originalFrames.value = [] // 注释掉这行，保留原始帧数据
     type HasCancel = { cancel: () => void }
     if (throttledSample && typeof (throttledSample as HasCancel).cancel === 'function') {
       ;(throttledSample as HasCancel).cancel()
