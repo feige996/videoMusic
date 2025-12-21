@@ -29,16 +29,7 @@ const videoUrlRef = toRef(props, 'videoUrl')
 const isLoading = ref(false)
 const useConcurrent = ref(false)
 
-// 显示模式枚举
-const DisplayMode = {
-  SPRITE: 'sprite',
-  ORIGINAL: 'original',
-} as const
-
-type DisplayModeType = (typeof DisplayMode)[keyof typeof DisplayMode]
-
-// 当前显示模式
-const displayMode = ref<DisplayModeType>(DisplayMode.ORIGINAL)
+// 移除显示模式切换，现在同时显示两种模式
 
 const { initializeVideoFrames, cleanupResources, originalFrames } = useVideoFrames({
   videoUrl: videoUrlRef,
@@ -114,42 +105,20 @@ watch(
         </label>
       </div>
 
-      <!-- 显示模式切换 -->
-      <div>
-        <label class="inline-flex items-center cursor-pointer select-none mr-4">
-          <input
-            type="radio"
-            name="displayMode"
-            :value="DisplayMode.SPRITE"
-            v-model="displayMode"
-            class="form-radio rounded-full text-blue-600 focus:ring-blue-500 h-4 w-4 transition duration-150 ease-in-out"
-          />
-          <span class="ml-2 text-sm text-gray-700 font-medium">雪碧图模式</span>
-        </label>
-        <label class="inline-flex items-center cursor-pointer select-none">
-          <input
-            type="radio"
-            name="displayMode"
-            :value="DisplayMode.ORIGINAL"
-            v-model="displayMode"
-            class="form-radio rounded-full text-blue-600 focus:ring-blue-500 h-4 w-4 transition duration-150 ease-in-out"
-          />
-          <span class="ml-2 text-sm text-gray-700 font-medium">原始帧模式</span>
-        </label>
-      </div>
+      <!-- 模式标题 -->
+      <div class="text-sm text-gray-500">测试模式：同时显示两种渲染方式</div>
     </div>
 
-    <!-- 视频帧容器 -->
-    <div
-      ref="frameContainer"
-      class="w-full overflow-hidden flex transition-opacity duration-200"
-      :class="{ 'opacity-50 cursor-wait': isLoading }"
-    >
-      <!-- 雪碧图模式 -->
-      <template v-if="displayMode === DisplayMode.SPRITE">
+    <!-- 雪碧图模式容器 -->
+    <div class="mb-6">
+      <h3 class="text-sm font-semibold text-gray-700 mb-2">1. 雪碧图模式</h3>
+      <div
+        class="w-full overflow-hidden flex transition-opacity duration-200"
+        :class="{ 'opacity-50 cursor-wait': isLoading }"
+      >
         <div
           v-for="frame in frameData"
-          :key="frame.index"
+          :key="`sprite-${frame.index}`"
           class="relative shrink-0 overflow-hidden bg-gray-100 hover:opacity-90 transition-opacity duration-200"
           :style="{
             width: `${frame.displayWidth}px`,
@@ -178,13 +147,20 @@ watch(
             帧{{ frame.index }}加载失败
           </div>
         </div>
-      </template>
+      </div>
+    </div>
 
-      <!-- 原始帧模式 -->
-      <template v-else-if="displayMode === DisplayMode.ORIGINAL">
+    <!-- 原始帧模式容器 -->
+    <div>
+      <h3 class="text-sm font-semibold text-gray-700 mb-2">2. 原始帧模式</h3>
+      <div
+        ref="frameContainer"
+        class="w-full overflow-hidden flex transition-opacity duration-200"
+        :class="{ 'opacity-50 cursor-wait': isLoading }"
+      >
         <div
           v-for="(frame, index) in originalFrames"
-          :key="index"
+          :key="`original-${index}`"
           class="relative shrink-0 overflow-hidden bg-gray-100 hover:opacity-90 transition-opacity duration-200"
           :style="{
             width: `${(spriteData?.frameWidth || 80) * (spriteData?.scale || 1)}px`,
@@ -193,7 +169,14 @@ watch(
         >
           <canvas
             v-if="frame"
-            :ref="(el: HTMLCanvasElement) => el && el.getContext('2d')?.drawImage(frame, 0, 0)"
+            :ref="
+              (el: Element | null) => {
+                if (el instanceof HTMLCanvasElement && frame) {
+                  const ctx = el.getContext('2d')
+                  if (ctx) ctx.drawImage(frame, 0, 0)
+                }
+              }
+            "
             class="w-full h-full object-cover"
           ></canvas>
           <!-- 原始帧信息 -->
@@ -210,7 +193,7 @@ watch(
             帧{{ index }}加载失败
           </div>
         </div>
-      </template>
+      </div>
     </div>
   </div>
 </template>
