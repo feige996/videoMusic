@@ -5,7 +5,7 @@ import longVideo from '@/assets/long.mp4' // 本地视频资源，3min52s，横�
 import shortVideo from '@/assets/short.mp4' // 本地视频资源,10S, 竖图
 import hengtu1 from '@/assets/hengtu1.mp4' // 本地视频资源，5S, 横图
 
-const localVideo = shortVideo
+const localVideo = hengtu1
 const remoteVideo = 'https://oss.laf.run/ukw0y1-site/beautiful-girl-with-audio.mp4' // 远程资源
 
 const videoUrl = ref(localVideo)

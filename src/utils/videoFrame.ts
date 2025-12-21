@@ -265,6 +265,7 @@ export async function createSpriteImage(
       resolve({ spriteUrl: '', rows: 0, cols: 0 })
       return
     }
+    console.log(frames)
 
     // 绘制所有帧到精灵图
     frames.forEach((frame, index) => {
@@ -279,6 +280,7 @@ export async function createSpriteImage(
     // 压缩质量0.1（更小体积）,因为界面上视频帧一般尺寸都很小所以0.1也很清晰。
     // (竖图）0.8时，需要20S ,0.1只需要5.4S，0.01时需要5.15S。（折中使用0.1)
     const spriteUrl = spriteCanvas.toDataURL('image/webp', 0.1)
+    console.log(spriteUrl)
     resolve({ spriteUrl, rows, cols })
   })
 }

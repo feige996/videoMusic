@@ -27,7 +27,7 @@ const spriteData = ref<{
 const preloadedMetadataRef = toRef(props, 'preloadedMetadata')
 const videoUrlRef = toRef(props, 'videoUrl')
 const isLoading = ref(false)
-const useConcurrent = ref(true)
+const useConcurrent = ref(false)
 
 const { initializeVideoFrames, cleanupResources } = useVideoFrames({
   videoUrl: videoUrlRef,
